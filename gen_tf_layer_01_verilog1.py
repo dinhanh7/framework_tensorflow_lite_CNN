@@ -1,8 +1,10 @@
+#day la code dung flow tren phan cung
+#python gen_tf_layer_01_verilog1.py --ifm_height 224 --ifm_width 224 --ifm_channel 3 --weight_filter 32 --stride1 2
 import numpy as np
 import tensorflow as tf
 import argparse
 
-# --- CÁC HÀM ĐỌC/GHI FILE TỪ HEX ---
+# --- CÁC HÀM ĐỌC/GHI FILE ---
 
 def read_int_array_file(filename, dtype=np.int32):
     with open(filename, "r") as file:
@@ -11,29 +13,15 @@ def read_int_array_file(filename, dtype=np.int32):
     for line in lines:
         s = line.strip()
         if s:
-            # Đọc chuỗi Hex thành số Unsigned, sau đó ép về Signed bằng Mask
-            val = int(s.split()[-1], 16)
-            if dtype == np.int8:
-                if val > 0x7F:
-                    val -= 0x100
-            elif dtype == np.int32:
-                if val > 0x7FFFFFFF:
-                    val -= 0x100000000
-            data.append(val)
+            data.append(int(s.split()[-1]))
     return np.array(data, dtype=dtype)
 
 def read_zp_file(filename):
     try:
         with open(filename, "r") as file:
             content = file.read().strip()
-            # Lấy chuỗi cuối phòng trường hợp có text đi kèm
             val_str = content.split()[-1]
-            
-        val = int(val_str, 16)
-        if val > 0x7F:
-            val -= 0x100
-            
-        return np.int8(val)
+        return np.int8(int(val_str))
     except Exception as e:
         print(f"Cảnh báo: Không đọc được file {filename}, dùng ZP=0. Lỗi: {e}")
         return np.int8(0)
@@ -42,14 +30,7 @@ def read_hex_file_weight(filename, shape):
     with open(filename, "r") as file:
         lines = file.readlines()    
     
-    raw_data = []
-    for x in lines:
-        val = int(x.strip(), 16)
-        if val > 0x7F:
-            val -= 0x100
-        raw_data.append(val)
-        
-    data = np.array(raw_data, dtype=np.int8)
+    data = np.array([int(x.strip()) for x in lines], dtype=np.int8)
 
     H, W, C, F = shape
     reshaped_data = np.zeros((H, W, C, F), dtype=np.int8)
@@ -66,14 +47,7 @@ def read_hex_file(filename, shape):
     with open(filename, "r") as file:
         lines = file.readlines()    
     
-    raw_data = []
-    for x in lines:
-        val = int(x.strip(), 16)
-        if val > 0x7F:
-            val -= 0x100
-        raw_data.append(val)
-        
-    data = np.array(raw_data, dtype=np.int8)
+    data = np.array([int(x.strip()) for x in lines], dtype=np.int8)
     
     H, W, C = shape
     reshaped_data = np.zeros((H, W, C), dtype=np.int8)
@@ -92,9 +66,7 @@ def write_hex_file(filename, data):
             for w in range(W):
                 for c in range(C):
                     int_value = int(round(data[h, w, c]))
-                    # Format dưới dạng Hex 2 ký tự (int8) mask bù 2
-                    hex_value = int_value & 0xFF 
-                    file.write(f"{hex_value:02X}\n")
+                    file.write(f"{int_value}\n")
 
 # --- CÁC HÀM XỬ LÝ SCALE ---
 
@@ -140,18 +112,18 @@ if __name__ == "__main__":
     output_feature_width = (args.ifm_width - 3 + 2 * args.padding1) // args.stride1 + 1
     output_feature_channel = args.weight_filter
 
-    # 2. KHAI BÁO CÁC ĐƯỜNG DẪN FILE ĐẦU VÀO VÀ ĐẦU RA TỪ FOLDER HEX
-    input_file = "golden_verilog_hex/op004_CONV_2D_ifm_values.hex"
-    zp_in_file = "golden_verilog_hex/op004_CONV_2D_ifm_zp.hex" 
+    # 2. KHAI BÁO CÁC ĐƯỜNG DẪN FILE ĐẦU VÀO VÀ ĐẦU RA
+    input_file = "golden_verilog/op004_CONV_2D_ifm_values.hex"
+    zp_in_file = "golden_verilog/op004_CONV_2D_ifm_zp.hex" 
     
-    weight_file = "golden_verilog_hex/op004_CONV_2D_weight_values.hex"
-    eff_bias_file = "golden_verilog_hex/op004_CONV_2D_effective_bias.hex"
+    weight_file = "golden_verilog/op004_CONV_2D_weight_values.hex"
+    eff_bias_file = "golden_verilog/op004_CONV_2D_effective_bias.txt"
     
-    m_file = "golden_verilog_hex/op004_CONV_2D_multiplier.hex"
-    n_file = "golden_verilog_hex/op004_CONV_2D_shift.hex"
+    m_file = "golden_verilog/op004_CONV_2D_multiplier.txt"
+    n_file = "golden_verilog/op004_CONV_2D_shift.txt"
     
-    zp_out_file = "golden_verilog_hex/op004_CONV_2D_ofm_zp.hex"
-    output_file = "golden_verilog_hex/op004_CONV_2D_ofm_verilog.hex"
+    zp_out_file = "golden_verilog/op004_CONV_2D_ofm_zp.hex"
+    output_file = "golden_verilog/op004_CONV_2D_ofm_verilog.hex"
 
     # 3. ĐỌC DỮ LIỆU TỪ CÁC FILE ĐẦU VÀO
     # Đọc input map & zero point
@@ -163,21 +135,9 @@ if __name__ == "__main__":
     weight_data_flat = read_hex_file_weight(weight_file, (3, 3, args.ifm_channel, args.weight_filter))
     weight_data = weight_data_flat.reshape(3, 3, args.ifm_channel, args.weight_filter)
     
-    # Đọc effective bias từ file HEX mới
+    # Đọc effective bias
     with open(eff_bias_file, "r") as f_bias:
-        raw_bias = []
-        for line in f_bias:
-            s_val = line.strip()
-            if not s_val:
-                continue
-            
-            # Giải mã Hex thành int32 (Cấu trúc tương tự)
-            val = int(s_val, 16)
-            if val > 0x7FFFFFFF:
-                val -= 0x100000000
-            raw_bias.append(val)
-            
-        effective_bias = np.array(raw_bias, dtype=np.int32)
+        effective_bias = np.array([int(float(line.strip())) for line in f_bias.readlines() if line.strip()], dtype=np.int32)
 
     # Đọc hệ số Requantize (Multiplier & Shift) & Output Zero Point
     m_from_file = read_int_array_file(m_file, dtype=np.int32)
