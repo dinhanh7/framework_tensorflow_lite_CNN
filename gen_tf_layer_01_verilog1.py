@@ -1,4 +1,5 @@
 #day la code dung flow tren phan cung
+#day la flow ham Conv moi
 #python gen_tf_layer_01_verilog1.py --ifm_height 224 --ifm_width 224 --ifm_channel 3 --weight_filter 32 --stride1 2
 import numpy as np
 import tensorflow as tf
