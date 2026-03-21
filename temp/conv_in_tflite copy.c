@@ -16,13 +16,12 @@
 #define STRIDE 2
 #define PADDING 1
 
-    // Kích thước OFM được tính toán
+// Kích thước OFM được tính toán
 #define OFM_HEIGHT ((IFM_HEIGHT - KERNEL_H + 2 * PADDING) / STRIDE + 1)
 #define OFM_WIDTH ((IFM_WIDTH - KERNEL_W + 2 * PADDING) / STRIDE + 1)
 #define OFM_CHANNEL WEIGHT_FILTER
 
-// Macro tính kích thước OFM đầy đủ
-#define OFM_SIZE (OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL)
+
 // ============================================================================
 // 2. CÁC HÀM MÔ PHỎNG RE-QUANTIZATION (QUAN TRỌNG NHẤT)
 // ============================================================================
@@ -41,7 +40,7 @@ int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
 }
 
 // Tái hiện hàm `RoundingRightShift` trong Python
-int32_t RoundingRightShift(int32_t x, int8_t shift) {
+int32_t RoundingRightShift(int32_t x, int32_t shift) {
     if (shift <= 0) {
         return x;
     }
@@ -54,16 +53,17 @@ int32_t RoundingRightShift(int32_t x, int8_t shift) {
 // Tái hiện hàm `MultiplyByQuantizedMultiplier` trong Python
 // *** CẢNH BÁO: Logic này mô phỏng theo script Python `gen_tf_layer_01_verilog1.py`
 // *** và không khớp với chuẩn TFLite, nhưng cần thiết để đồng bộ kết quả.
-int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int8_t shift) {
+int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int32_t shift) {
     // Logic của Python: 
     // left_shift = shift if shift > 0 else 0
     // right_shift = -shift if shift < 0 else 0
-    int8_t left_shift = (shift > 0) ? shift : 0;
-    int8_t right_shift = (shift < 0) ? -shift : 0;
+    int32_t left_shift = (shift > 0) ? shift : 0;
+    int32_t right_shift = (shift < 0) ? -shift : 0;
 
     // x_shifted = x * (1 << left_shift)
     // Cần cẩn thận với tràn số khi dịch trái x
-    int64_t x_shifted_64 = (int64_t)x << left_shift;
+    int64_t x_64 = (int64_t)x;
+    int64_t x_shifted_64 = x_64 << left_shift;
 
     // Bão hòa giá trị x_shifted về int32
     int32_t x_shifted_32;
@@ -164,8 +164,7 @@ int main() {
     int8_t* weight = (int8_t*)malloc(KERNEL_H * KERNEL_W * IFM_CHANNEL * WEIGHT_FILTER * sizeof(int8_t));
     int32_t* effective_bias = (int32_t*)malloc(OFM_CHANNEL * sizeof(int32_t));
     int32_t* m_values = (int32_t*)malloc(OFM_CHANNEL * sizeof(int32_t));
-    int8_t* n_values = (int8_t*)malloc(OFM_CHANNEL * sizeof(int8_t)); 
-    // int16_t* accumulator = (int16_t*)malloc(OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL * sizeof(int16_t));
+    int32_t* n_values = (int32_t*)malloc(OFM_CHANNEL * sizeof(int32_t)); // Đọc là int32 để an toàn
     int32_t* accumulator = (int32_t*)malloc(OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL * sizeof(int32_t));
     int8_t* ofm = (int8_t*)malloc(OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL * sizeof(int8_t));
     int8_t* padded_ifm = NULL; // Sẽ được cấp phát sau khi tính toán padding
@@ -189,7 +188,7 @@ int main() {
     read_int8_array_from_file(weight_file, weight, KERNEL_H * KERNEL_W * IFM_CHANNEL * WEIGHT_FILTER);
     read_int32_array_from_file(eff_bias_file, effective_bias, OFM_CHANNEL);
     read_int32_array_from_file(m_file, m_values, OFM_CHANNEL);
-    read_int8_array_from_file(n_file, n_values, OFM_CHANNEL);
+    read_int32_array_from_file(n_file, n_values, OFM_CHANNEL);
     int8_t zp_in = read_zp_from_file(ifm_zp_file);
     int8_t zp_ofm = read_zp_from_file(ofm_zp_file);
     printf("Info: ZP_IN = %d, ZP_OFM = %d\n", zp_in, zp_ofm);
@@ -235,7 +234,7 @@ int main() {
     for (int oh = 0; oh < OFM_HEIGHT; ++oh) {
         for (int ow = 0; ow < OFM_WIDTH; ++ow) {
             for (int oc = 0; oc < OFM_CHANNEL; ++oc) {
-                int32_t acc = 0;
+                int32_t acc = effective_bias[oc];
                 for (int kh = 0; kh < KERNEL_H; ++kh) {
                     for (int kw = 0; kw < KERNEL_W; ++kw) {
                         for (int ic = 0; ic < IFM_CHANNEL; ++ic) {
@@ -258,29 +257,6 @@ int main() {
         }
     }
 
-    // --- Xuất accumulator (int32) ra file để debug ---
-    {
-        FILE* fp_acc = fopen("golden_verilog/op004_CONV_2D_accumulator_int32.hex", "w");
-        if (fp_acc) {
-            int total = OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL;
-            for (int i = 0; i < total; ++i)
-                fprintf(fp_acc, "%08X\n", (uint32_t)accumulator[i]);
-            fclose(fp_acc);
-            printf("Debug: accumulator (int32 hex) written.\n");
-        }
-    }
-
-    // --- CỘNG EFFECTIVE BIAS (tách riêng khỏi phần conv) ---
-    printf("Adding effective bias...\n");
-    for (int oh = 0; oh < OFM_HEIGHT; ++oh) {
-        for (int ow = 0; ow < OFM_WIDTH; ++ow) {
-            for (int oc = 0; oc < OFM_CHANNEL; ++oc) {
-                int acc_idx = oh * OFM_WIDTH * OFM_CHANNEL + ow * OFM_CHANNEL + oc;
-                accumulator[acc_idx] += effective_bias[oc];
-            }
-        }
-    }
-
     // --- RE-QUANTIZATION (Giống hệt bước 6 trong script Python) ---
     printf("Performing re-quantization...\n");
     for (int oh = 0; oh < OFM_HEIGHT; ++oh) {
@@ -290,7 +266,7 @@ int main() {
                 
                 int32_t acc_val = accumulator[idx];
                 int32_t m = m_values[oc];
-                int8_t n = n_values[oc];
+                int32_t n = n_values[oc];
 
                 // Áp dụng phép nhân và dịch bit
                 int32_t res_scaled = MultiplyByQuantizedMultiplier(acc_val, m, n);
@@ -315,7 +291,6 @@ int main() {
     free(m_values);
     free(n_values);
     free(accumulator);
-    // free(accumulator_32);
     free(ofm);
     free(padded_ifm);
 

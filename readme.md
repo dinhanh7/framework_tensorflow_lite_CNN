@@ -2,7 +2,7 @@ Kiểu dữ liệu cho quantize:
 weight, ifm, ofm: int8
 zero-point: int8
 scale: fp32
-effective_bias: int8
+effective_bias: int32
 hệ số M: int32
 hệ số n (shift): int8
 
