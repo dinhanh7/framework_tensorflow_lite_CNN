@@ -58,4 +58,4 @@ def compare_files_larger_points(file1, file2):
         print("Hai file giống hệt nhau!")
 
 # So sánh file output từ mô phỏng C và Verilog
-compare_files_larger_points("golden_verilog/op004_CONV_2D_ofm_c_sim.hex", "golden_verilog/op004_CONV_2D_ofm_verilog.hex")
+compare_files_larger_points("golden_verilog/op004_CONV_2D_ofm_c_sim.txt", "golden_verilog/op004_CONV_2D_ofm_verilog.txt")

@@ -174,14 +174,14 @@ int main() {
     const char* base_path = "golden_verilog/";
     char ifm_file[256], weight_file[256], eff_bias_file[256], m_file[256], n_file[256], ifm_zp_file[256], ofm_zp_file[256], ofm_file[256];
 
-    sprintf(ifm_file, "%sop004_CONV_2D_ifm_values.hex", base_path);
-    sprintf(weight_file, "%sop004_CONV_2D_weight_values.hex", base_path);
+    sprintf(ifm_file, "%sop004_CONV_2D_ifm_values.txt", base_path);
+    sprintf(weight_file, "%sop004_CONV_2D_weight_values.txt", base_path);
     sprintf(eff_bias_file, "%sop004_CONV_2D_effective_bias.txt", base_path);
     sprintf(m_file, "%sop004_CONV_2D_multiplier.txt", base_path);
     sprintf(n_file, "%sop004_CONV_2D_shift.txt", base_path);
-    sprintf(ifm_zp_file, "%sop004_CONV_2D_ifm_zp.hex", base_path);
-    sprintf(ofm_zp_file, "%sop004_CONV_2D_ofm_zp.hex", base_path);
-    sprintf(ofm_file, "%sop004_CONV_2D_ofm_c_sim.hex", base_path); // Tên file output mới
+    sprintf(ifm_zp_file, "%sop004_CONV_2D_ifm_zp.txt", base_path);
+    sprintf(ofm_zp_file, "%sop004_CONV_2D_ofm_zp.txt", base_path);
+    sprintf(ofm_file, "%sop004_CONV_2D_ofm_c_sim.txt", base_path); // Tên file output mới
 
     // --- Đọc dữ liệu từ file --- (ĐÃ SỬA LỖI)
     printf("Reading input files...\n");
@@ -260,13 +260,13 @@ int main() {
 
     // --- Xuất accumulator (int32) ra file để debug ---
     {
-        FILE* fp_acc = fopen("golden_verilog/op004_CONV_2D_accumulator_int32.hex", "w");
+        FILE* fp_acc = fopen("golden_verilog/op004_CONV_2D_accumulator_int32.txt", "w");
         if (fp_acc) {
             int total = OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL;
             for (int i = 0; i < total; ++i)
-                fprintf(fp_acc, "%08X\n", (uint32_t)accumulator[i]);
+                fprintf(fp_acc, "%d\n", accumulator[i]);
             fclose(fp_acc);
-            printf("Debug: accumulator (int32 hex) written.\n");
+            printf("Debug: accumulator (int32 decimal) written.\n");
         }
     }
 
