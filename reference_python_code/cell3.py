@@ -1,7 +1,7 @@
 # ===== Convert Keras -> TFLite (FP32) + Quantize INT8 và đánh giá Top-1/Top-5 =====
 import numpy as np
 import tensorflow as tf
-from cell2 import target_model, imgs, labels, top1_top5_from_logits
+from refference_python_code.cell2 import target_model, imgs, labels, top1_top5_from_logits
 
 # 1) Converter ra TFLite FP32
 converter_fp32 = tf.lite.TFLiteConverter.from_keras_model(target_model)
