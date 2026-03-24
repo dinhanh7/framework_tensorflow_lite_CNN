@@ -1,5 +1,6 @@
 #include "cnn_layers.h"
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,7 +13,7 @@ static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
     int64_t a_64 = a;
     int64_t b_64 = b;
     int64_t ab_64 = a_64 * b_64;
-    int64_t nudge = (ab_64 >= 0) ? (1LL << 30) : (-(1LL << 30));
+    int64_t nudge = (1LL << 30);
     int64_t result_64 = (ab_64 + nudge) >> 31;
     if (result_64 > 2147483647LL) return 2147483647;
     if (result_64 < -2147483648LL) return -2147483648LL;
@@ -23,7 +24,7 @@ static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
 static int32_t RoundingRightShift(int32_t x, int shift) {
     if (shift <= 0) return x;
     int64_t x_64 = x;
-    int64_t nudge = (x_64 >= 0) ? (1LL << (shift - 1)) : (-(1LL << (shift - 1)));
+    int64_t nudge = (1LL << (shift - 1));
     int64_t result_64 = (x_64 + nudge) >> shift;
     if (result_64 > 2147483647LL) return 2147483647;
     if (result_64 < -2147483648LL) return -2147483648LL;
