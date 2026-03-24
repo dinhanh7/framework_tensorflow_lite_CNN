@@ -57,5 +57,5 @@ def compare_files_larger_points(file1, file2):
     else:
         print("Hai file giống hệt nhau!")
 
-# So sánh file output từ mô phỏng C và Verilog
-compare_files_larger_points("golden_verilog/op004_CONV_2D_ofm_c_sim.txt", "golden_verilog/op004_CONV_2D_ofm_verilog.txt")
+# So sánh file output từ mô phỏng C và TFLite
+compare_files_larger_points("c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_27_MEAN\\ofm27_c_sim.txt", "c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_27_MEAN\\ofm27.txt")
