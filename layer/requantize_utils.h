@@ -109,5 +109,9 @@ static void QuantizeMultiplier(double double_multiplier, int32_t* quantized_mult
     
     *quantized_multiplier = (int32_t)q_fixed;
 }
+int16_t SaturatingLeftShift(int16_t val, int shift) {
+    int32_t res = (int32_t)val * (1 << shift);
+    return clamp_int16(res);
+}
 
 #endif
