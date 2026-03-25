@@ -5,8 +5,6 @@
 #include <math.h>
 #include "../layer/hardswish.h"
 
-#include "../layer/hardswish.h"
-
 // ============================================================================
 // Helper Functions (File I/O)
 // ============================================================================
@@ -63,8 +61,8 @@ int main() {
     printf("Starting HardSwish Test...\n");
 
     // Paths
-    const char params_dir[] = "extracted_params/layer017_HARD_SWISH_1_block3a_expand_activation_1_truediv__1_block3a_expand_activation_1_Relu6_1_block3a_expand_activation_1_add_1_block3a_expand_activation_1_mul";
-    const char io_dir[] = "all_layer_io/layer_17_HARD_SWISH";
+    const char params_dir[] = "extracted_params/layer020_HARD_SWISH_1_block3b_expand_activation_1_truediv__1_block3b_expand_activation_1_Relu6_1_block3b_expand_activation_1_add_1_block3b_expand_activation_1_mul";
+    const char io_dir[] = "all_layer_io/layer_20_HARD_SWISH";
     char path_buf[512];
 
     // 1. Read Scale/ZP
