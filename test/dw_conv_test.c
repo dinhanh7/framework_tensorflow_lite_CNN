@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include "dw_conv.h"
 #include "../layer/dw_conv.h"
 
 // ============================================================================
@@ -132,13 +131,13 @@ int main() {
 
     // --- Đường dẫn file hay thay đổi theo layer ---
     // --- Thay đổi ở đây ---
-    const char* param_base_path = "layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depthwise_1_block4a_dwconv2_1_Squeeze";
+    const char* param_base_path = "extracted_params/layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depthwise_1_block4a_dwconv2_1_Squeeze";
     // Ở quyen's machine
-    const char* io_base_path = "input_output/layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depthwise_1_block4a_dwconv2_1_Squeeze";
+    const char* io_base_path = "all_layer_io/layer_25_DEPTHWISE_CONV_2D";
     char ifm_file[512], weight_file[512], eff_bias_file[512], m_file[512], n_file[512];
     char ifm_zp_file[512], ofm_zp_file[512], ofm_out_file[512], acc_out_file[512];
 
-    build_path(ifm_file, sizeof(ifm_file), io_base_path, "ifm_values.txt");
+    build_path(ifm_file, sizeof(ifm_file), io_base_path, "ifm.txt");
     build_path(weight_file, sizeof(weight_file), param_base_path, "weight_values.txt");
     build_path(eff_bias_file, sizeof(eff_bias_file), param_base_path, "effective_bias.txt"); 
     build_path(m_file, sizeof(m_file), param_base_path, "multiplier.txt");

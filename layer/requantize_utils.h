@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <math.h>
 
 // Tái hiện hàm `SaturatingRoundingDoublingHighMul` (Đã đồng bộ với phiên bản TFLite chính xác)
 static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
@@ -16,15 +17,14 @@ static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
     return (int32_t)result_64;
 }
 
-// Tái hiện hàm `RoundingRightShift` (Đã đồng bộ với phiên bản TFLite chính xác)
+// Tái hiện hàm `RoundingRightShift` (Symmetric Rounding - giống gemmlowp::RoundingDivideByPOT)
+// Giúp xử lý các trường hợp làm tròn số âm chính xác hơn so với (x + nudge) >> shift
 static int32_t RoundingRightShift(int32_t x, int shift) {
     if (shift <= 0) return x;
-    int64_t x_64 = x;
-    int64_t nudge = (1LL << (shift - 1));
-    int64_t result_64 = (x_64 + nudge) >> shift;
-    if (result_64 > 2147483647LL) return 2147483647;
-    if (result_64 < -2147483648LL) return -2147483648LL;
-    return (int32_t)result_64;
+    int32_t mask = (1 << shift) - 1;
+    int32_t remainder = x & mask;
+    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
+    return (x >> shift) + (remainder > threshold ? 1 : 0);
 }
 
 static inline int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int32_t shift) {
@@ -85,19 +85,28 @@ static inline int16_t RoundingDivideByPOT(int16_t x, int exponent) {
     return clamp_int16(result);
 }
 
-// Tái hiện hàm `QuantizeMultiplier` từ TFLite
-static inline void QuantizeMultiplier(double real_multiplier, int32_t* quantized_multiplier, int* shift) {
-    if (real_multiplier == 0.) {
+static void QuantizeMultiplier(double double_multiplier, int32_t* quantized_multiplier, int* shift) {
+    if (double_multiplier == 0.) {
         *quantized_multiplier = 0;
         *shift = 0;
         return;
     }
-    const double q = frexp(real_multiplier, shift);
-    int64_t q_fixed = (int64_t)round(q * (1LL << 31));
+    // frexp trả về q trong khoảng [0.5, 1) sao cho double_multiplier = q * 2^shift
+    const double q = frexp(double_multiplier, shift);
+    
+    // Chuyển q về dạng fixed-point 31 bit (Q0.31)
+    // q * 2^31 sẽ nằm trong khoảng [2^30, 2^31)
+    int64_t q_fixed = (int64_t)(round(q * (1LL << 31)));
+    
+    // Trường hợp đặc biệt: Nếu làm tròn lên chạm ngưỡng 2^31
     if (q_fixed == (1LL << 31)) {
         q_fixed /= 2;
-        ++*shift;
+        *shift += 1;
     }
+    
+    // Đảm bảo không tràn int32 (mặc dù q_fixed <= 2^31-1 sau bước trên)
+    if (q_fixed > 2147483647LL) q_fixed = 2147483647LL; 
+    
     *quantized_multiplier = (int32_t)q_fixed;
 }
 

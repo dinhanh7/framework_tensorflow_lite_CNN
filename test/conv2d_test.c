@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include "../layer/cnn_layers.h"
+#include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
 #define IFM_H 56
