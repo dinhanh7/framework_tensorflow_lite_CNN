@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "requantize_utils.h"
 
 // Các cấu trúc dữ liệu mô phỏng TensorFlow Lite Micro
 struct RuntimeShape {
@@ -30,23 +31,9 @@ struct ArithmeticParams {
     int32_t quantized_activation_max;
 };
 
-// Hàm phụ trợ cho việc dịch và nhân bit dùng chung (cho C)
+
 // Hàm này tương đương MultiplyByQuantizedMultiplier của TFLite
-static inline int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int shift) {
-    int left_shift = shift > 0 ? shift : 0;
-    int right_shift = shift > 0 ? 0 : -shift;
-    
-    int64_t total = (int64_t)x * (int64_t)quantized_multiplier;
-    int32_t result = (int32_t)((total + (1LL << 30)) >> 31);
-    
-    if (left_shift > 0) {
-        result <<= left_shift;
-    }
-    if (right_shift > 0) {
-        result = (int32_t)(((int64_t)result + (1LL << (right_shift - 1))) >> right_shift);
-    }
-    return result;
-}
+// Đã được thay thế bằng include "requantize_utils.h"
 
 // 1. Hàm tính toán tổng số phần tử (MatchingElementsSize)
 static inline int MatchingElementsSize(const struct RuntimeShape* shape1,

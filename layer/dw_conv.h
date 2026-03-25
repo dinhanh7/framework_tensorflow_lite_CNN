@@ -14,50 +14,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include "utils.h"
+#include "requantize_utils.h"
 
-#ifndef MAX
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#endif
 
-#ifndef MIN
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
-// Các hàm Re-quantization dựa trên TFLite Micro
-int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
-    int64_t a_64 = a;
-    int64_t b_64 = b;
-    int64_t ab_64 = a_64 * b_64;
-    int64_t nudge = (int64_t)1 << 30;
-    int64_t result_64 = (ab_64 + nudge) >> 31;
-    return (int32_t)result_64;
-}
-
-int32_t RoundingRightShift(int32_t x, int32_t shift) {
-    if (shift <= 0) {
-        return x;
-    }
-    int32_t mask = (int32_t)((1LL << shift) - 1);
-    int32_t remainder = x & mask;
-    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
-    return (x >> shift) + ((remainder > threshold) ? 1 : 0);
-}
-
-int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int32_t shift) {
-    int32_t left_shift = (shift > 0) ? shift : 0;
-    int32_t right_shift = (shift < 0) ? -shift : 0;
-    int64_t x_shifted_64 = (int64_t)x << left_shift;
-    int32_t x_shifted_32;
-    if (x_shifted_64 > 2147483647LL) {
-        x_shifted_32 = 2147483647;
-    } else if (x_shifted_64 < -2147483648LL) {
-        x_shifted_32 = -2147483648LL;
-    } else {
-        x_shifted_32 = (int32_t)x_shifted_64;
-    }
-    int32_t high_mul = SaturatingRoundingDoublingHighMul(x_shifted_32, quantized_multiplier);
-    return RoundingRightShift(high_mul, right_shift);
-}
 
 // Hàm Offset để lấy vị trí từ mảng 1D (trải phẳng Tensor 4D)
 int Offset(int batch, int h, int w, int c, int height, int width, int depth) {

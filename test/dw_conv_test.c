@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "dw_conv.h"
+#include "../layer/dw_conv.h"
 
 // ============================================================================
 // 1. ĐỊNH NGHĨA CÁC KÍCH THƯỚC (Thay đổi tương ứng với layer025)

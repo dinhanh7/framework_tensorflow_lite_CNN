@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include "cnn_layers.h"
+#include "../layer/cnn_layers.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
 #define IFM_H 56
@@ -72,25 +72,6 @@ void read_int8_array(const char* filename, int8_t* buffer, int size) {
     fclose(f);
 }
 
-// Helper: Calculate quantized multiplier and shift
-void QuantizeMultiplier(double double_multiplier, int32_t* quantized_multiplier, int8_t* shift) {
-    if (double_multiplier == 0.) {
-        *quantized_multiplier = 0;
-        *shift = 0;
-        return;
-    }
-    int exponent;
-    double significand = frexp(double_multiplier, &exponent);
-    int64_t q_fixed = (int64_t)round(significand * 2147483648.0); // 2^31
-
-    if (q_fixed == 2147483648LL) {
-        q_fixed /= 2;
-        exponent += 1;
-    }
-    // Handle shift range if needed, though TFLite handles large shifts
-    *quantized_multiplier = (int32_t)q_fixed;
-    *shift = (int8_t)exponent;
-}
 
 int main() {
     printf("Starting CONV_2D Test (Layer 5)...\n");
@@ -159,14 +140,16 @@ int main() {
                 }
             }
         }
-        effective_biases[oc] = biases[oc] - ifm_zp * weight_sum; // Be careful with sign of ifm_zp. 
+        effective_biases[oc] = biases[oc] - (int8_t)ifm_zp * weight_sum; // Be careful with sign of ifm_zp. 
         // Note: In TFLite quantization, (input - zp) * weight. 
         // = input * weight - zp * weight. 
         // So we SUBTRACT zp * sum(weight). Correct.
 
         // Calculate Multiplier and Shift
         double double_multiplier = (double)ifm_scale * (double)weight_scales[oc] / (double)ofm_scale;
-        QuantizeMultiplier(double_multiplier, &output_multipliers[oc], &output_shifts[oc]);
+        int temp_shift = 0;
+        QuantizeMultiplier(double_multiplier, &output_multipliers[oc], &temp_shift);
+        output_shifts[oc] = (int8_t)temp_shift;
     }
 
     // 5. Prepare Output Buffer

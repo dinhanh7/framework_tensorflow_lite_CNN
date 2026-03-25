@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include "add.h"
+#include "../layer/add.h"
 
 // Define max buffer size for reading files
 #define MAX_DATA_SIZE 200000
@@ -61,26 +61,6 @@ void write_data(const char* filepath, int8_t* buffer, int size) {
     }
     fclose(f);
     printf("Output written to: %s\n", filepath);
-}
-
-// Helper: Quantize Multiplier Function (standard TFLite logic)
-void QuantizeMultiplier(double double_multiplier, int32_t* quantized_multiplier, int* shift) {
-    if (double_multiplier == 0.) {
-        *quantized_multiplier = 0;
-        *shift = 0;
-        return;
-    }
-    int exponent;
-    double significand = frexp(double_multiplier, &exponent);
-    int64_t q_fixed = (int64_t)(round(significand * (1LL << 31)));
-    
-    // Handle the special case where the result is exactly 1.0
-    if (q_fixed == (1LL << 31)) {
-        q_fixed /= 2;
-        exponent += 1;
-    }
-    *quantized_multiplier = (int32_t)q_fixed;
-    *shift = exponent;
 }
 
 // Helper: Calculate Arithmetic Params for ADD
