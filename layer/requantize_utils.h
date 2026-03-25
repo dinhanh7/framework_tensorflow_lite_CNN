@@ -114,4 +114,16 @@ int16_t SaturatingLeftShift(int16_t val, int shift) {
     return clamp_int16(res);
 }
 
+// Hàm helper mô phỏng phép chia cho lũy thừa của 2 với làm tròn cho int32
+static inline int32_t RoundingDivideByPOT_32(int32_t x, int exponent) {
+    if (exponent <= 0) return x;
+    int32_t mask = (1 << exponent) - 1;
+    int32_t bias = (1 << (exponent - 1));
+    int32_t remainder = x & mask;
+    int32_t result = x >> exponent;
+    if (remainder > bias || (remainder == bias && (result & 1))) {
+        result++;
+    }
+    return result;
+}
 #endif

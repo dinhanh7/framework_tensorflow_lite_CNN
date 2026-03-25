@@ -109,15 +109,38 @@ int main() {
     read_int8_array(path, golden_data, flat_size);
 
     // 5. Run Logistic
-    printf("Running quantized_logistic_int8...\n");
-    quantized_logistic_int8(
-        input_data,
-        output_data,
-        flat_size,
-        input_scale,
+    printf("Running LogisticInt8...\n");
+
+    // Calculate Multiplier and Shift
+    // Logic matches TFLite reference: double real_multiplier = input_scale * (1 << 27); or similar
+    // We use the same logic as the wrapper in logistic.h for consistency
+    double effective_scale = input_scale * (1 << 27);
+    int exponent;
+    double significand = frexp(effective_scale, &exponent);
+    int32_t input_multiplier;
+    if (significand == 0.5) {
+        input_multiplier = 1073741824; // 1 << 30
+    } else {
+        input_multiplier = (int32_t)(significand * 2147483648.0); // Q31
+    }
+    int32_t input_shift = exponent; // input_shift = left shift amount for QuantizedMultiplier(HighMul) + RightShift logic.
+    // TFLite uses input_multiplier * input * 2^shift.
+    // With HighMul (>>31), effective multiplier is M/2^31.
+    // We want M * 2^-8.
+    // M/2^31 * 2^shift = M * 2^-8 -> shift - 31 = -8 -> shift = 23.
+    // frexp exponent is 23. So shift = exponent.
+
+    printf("Computed Params: Multiplier=%d, Shift=%d, InputRadius=127\n", 
+           input_multiplier, input_shift);
+
+    LogisticInt8(
         input_zp,
-        output_scale,
-        output_zp
+        127, // input_range_radius (covers full int8)
+        input_multiplier,
+        input_shift,
+        flat_size,
+        input_data,
+        output_data
     );
 
     // 6. Verification

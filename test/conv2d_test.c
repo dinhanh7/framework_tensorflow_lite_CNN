@@ -6,14 +6,14 @@
 #include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
-#define IFM_H 56
-#define IFM_W 56
-#define IFM_C 128
-#define KERNEL_H 1
-#define KERNEL_W 1
+#define IFM_H 28
+#define IFM_W 28
+#define IFM_C 48
+#define KERNEL_H 3
+#define KERNEL_W 3
 #define STRIDE_H 1
 #define STRIDE_W 1
-#define OFM_C 32
+#define OFM_C 192
 #define PADDING_TYPE "SAME"
 
 // Helper function to read int array from text file
@@ -87,8 +87,8 @@ int main() {
 
     // 2. Read Quantization Parameters
     // Paths assumed correct relative to execution dir
-    char params_dir[] = "extracted_params/layer014_CONV_2D_1_block2b_project_conv_1_BiasAdd_1_block2b_project_conv_1_convolution_1_block2b_project_conv_1_Squeeze";
-    char input_dir[] = "all_layer_io/layer_14_CONV_2D";
+    char params_dir[] = "extracted_params/layer019_CONV_2D_1_block3b_expand_conv_1_BiasAdd_1_block3b_expand_conv_1_convolution_1_block3b_expand_conv_1_Squeeze";
+    char input_dir[] = "all_layer_io/layer_19_CONV_2D";
     char path_buf[512];
 
     // Read scalars
