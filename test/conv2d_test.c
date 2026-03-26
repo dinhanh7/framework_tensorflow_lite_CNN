@@ -6,11 +6,11 @@
 #include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
-#define IFM_H 28
-#define IFM_W 28
-#define IFM_C 48
-#define KERNEL_H 3
-#define KERNEL_W 3
+#define IFM_H 1
+#define IFM_W 1
+#define IFM_C 12
+#define KERNEL_H 1
+#define KERNEL_W 1
 #define STRIDE_H 1
 #define STRIDE_W 1
 #define OFM_C 192
@@ -87,8 +87,8 @@ int main() {
 
     // 2. Read Quantization Parameters
     // Paths assumed correct relative to execution dir
-    char params_dir[] = "extracted_params/layer019_CONV_2D_1_block3b_expand_conv_1_BiasAdd_1_block3b_expand_conv_1_convolution_1_block3b_expand_conv_1_Squeeze";
-    char input_dir[] = "all_layer_io/layer_19_CONV_2D";
+    char params_dir[] = "all_layer_io\\layer_34_CONV_2D";
+    char input_dir[] = "all_layer_io\\layer_34_CONV_2D";
     char path_buf[512];
 
     // Read scalars
@@ -98,17 +98,17 @@ int main() {
     sprintf(path_buf, "%s/ifm_zp.txt", params_dir);
     read_int_array(path_buf, &ifm_zp, 1);
 
-    sprintf(path_buf, "%s/ofm_scale.txt", params_dir);
+    sprintf(path_buf, "%s/ofm_0_scale.txt", params_dir);
     read_float_array(path_buf, &ofm_scale, 1);
 
-    sprintf(path_buf, "%s/ofm_zp.txt", params_dir);
+    sprintf(path_buf, "%s/ofm_0_zp.txt", params_dir);
     read_int_array(path_buf, &ofm_zp, 1);
 
     // Read arrays
     sprintf(path_buf, "%s/weight_scale.txt", params_dir);
     read_float_array(path_buf, weight_scales, OFM_C);
 
-    sprintf(path_buf, "%s/bias_value.txt", params_dir);
+    sprintf(path_buf, "%s/bias.txt", params_dir);
     read_int_array(path_buf, biases, OFM_C);
 
     // 3. Load input Data and Weights
@@ -119,7 +119,7 @@ int main() {
 
     int weight_size = OFM_C * KERNEL_H * KERNEL_W * IFM_C;
     int8_t* weight_data = (int8_t*)malloc(weight_size * sizeof(int8_t));
-    sprintf(path_buf, "%s/weight_values.txt", params_dir);
+    sprintf(path_buf, "%s/weight.txt", params_dir);
     read_int8_array(path_buf, weight_data, weight_size);
 
     // 4. Compute Derived Parameters (Effective Bias, Multiplier, Shift)
@@ -180,7 +180,7 @@ int main() {
     printf("Inference done. Output shape: %d x %d x %d\n", out_h_check, out_w_check, OFM_C);
 
     // 7. Save Result to Params Dir
-    sprintf(path_buf, "%s/ofm.txt", params_dir);
+    sprintf(path_buf, "%s/ofm_sim.txt", params_dir);
     FILE* f_out = fopen(path_buf, "w");
     if (f_out) {
         int total_count = out_h_check * out_w_check * OFM_C;
