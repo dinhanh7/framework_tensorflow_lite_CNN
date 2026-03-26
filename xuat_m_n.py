@@ -120,17 +120,26 @@ def main():
 
         # Đọc scale
         scale_ifm = read_float_file(scale_ifm_path)
+        
+        print(f"Reading OFM scale from: {scale_ofm_path}")
         scale_ofm = read_float_file(scale_ofm_path)
+        
+        print(f"Reading Weight scale from: {scale_w_path}")
         scale_w_all = read_float_array_file(scale_w_path)
         num_filters = len(scale_w_all)
 
         # Đọc dữ liệu để tính effective bias
+        print(f"Reading IFM ZP from: {ifm_zp_path}")
         zp_in = read_zp_file(ifm_zp_path)
+        
+        print(f"Reading Bias from: {bias_values_path}")
         bias_data = read_bias_file(bias_values_path, num_filters)
         
         # Đọc và reshape weight để tính sum_w
+        print(f"Reading Weights from: {weight_values_path}")
         with open(weight_values_path, "r") as f:
-            num_weights = len(f.readlines())
+            lines = f.readlines()
+            num_weights = len([l for l in lines if l.strip()]) # Count non-empty lines
         
         # Giả định kernel là 3x3. 9 = 3*3
         kernel_size_squared = 9 

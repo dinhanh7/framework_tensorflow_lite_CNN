@@ -67,8 +67,8 @@ int32_t read_int(const char* filename) {
 
 int main() {
     // Paths
-    const char* io_dir = "all_layer_io/layer_35_LOGISTIC";
-    const char* param_dir = "extracted_params/layer035_LOGISTIC_1_block4a_se_expand_1_Sigmoid";
+    const char* io_dir = "all_layer_io/layer_50_LOGISTIC";
+    const char* param_dir = "extracted_params/layer050_LOGISTIC_1_block4b_se_expand_1_Sigmoid";
 
     printf("=== Testing Logistic Layer (Layer 35) ===\n");
     printf("IO Directory: %s\n", io_dir);
