@@ -6,15 +6,15 @@
 // ============================================================================
 // 1. ĐỊNH NGHĨA CÁC KÍCH THƯỚC (Thay đổi nếu cần)
 // ============================================================================
-// Đây là các tham số từ command line của script python
-#define IFM_HEIGHT 224
-#define IFM_WIDTH 224
-#define IFM_CHANNEL 3
-#define WEIGHT_FILTER 32
-#define KERNEL_H 3
-#define KERNEL_W 3
-#define STRIDE 2
-#define PADDING 1
+// Đây là các tham số cho Layer 34 (Conv 1x1 trong khối SE)
+#define IFM_HEIGHT 1
+#define IFM_WIDTH 1
+#define IFM_CHANNEL 12
+#define WEIGHT_FILTER 192
+#define KERNEL_H 1
+#define KERNEL_W 1
+#define STRIDE 1
+#define PADDING 0
 
     // Kích thước OFM được tính toán
 #define OFM_HEIGHT ((IFM_HEIGHT - KERNEL_H + 2 * PADDING) / STRIDE + 1)
@@ -170,18 +170,20 @@ int main() {
     int8_t* ofm = (int8_t*)malloc(OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL * sizeof(int8_t));
     int8_t* padded_ifm = NULL; // Sẽ được cấp phát sau khi tính toán padding
 
-    // --- Đường dẫn file (giống trong script python) ---
-    const char* base_path = "golden_verilog/";
+    // --- Đường dẫn file (Đã cập nhật cho Layer 34) ---
+    const char* base_path = "c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_34_CONV_2D\\";
     char ifm_file[256], weight_file[256], bias_file[256], m_file[256], n_file[256], ifm_zp_file[256], ofm_zp_file[256], ofm_file[256];
 
-    sprintf(ifm_file, "%sop004_CONV_2D_ifm_values.txt", base_path);
-    sprintf(weight_file, "%sop004_CONV_2D_weight_values.txt", base_path);
-    sprintf(bias_file, "%sop004_CONV_2D_bias.txt", base_path);
-    sprintf(m_file, "%sop004_CONV_2D_multiplier.txt", base_path);
-    sprintf(n_file, "%sop004_CONV_2D_shift.txt", base_path);
-    sprintf(ifm_zp_file, "%sop004_CONV_2D_ifm_zp.txt", base_path);
-    sprintf(ofm_zp_file, "%sop004_CONV_2D_ofm_zp.txt", base_path);
-    sprintf(ofm_file, "%sop004_CONV_2D_ofm_c_sim.txt", base_path); // Tên file output mới
+    sprintf(ifm_file, "%sifm.txt", base_path);
+    sprintf(weight_file, "%sweight.txt", base_path);
+    sprintf(bias_file, "%sbias.txt", base_path);
+    sprintf(m_file, "%smultiplier.txt", base_path); 
+    sprintf(n_file, "%sshift.txt", base_path);
+    sprintf(ifm_zp_file, "%sifm_zp.txt", base_path);
+    // Lưu ý: ofm_zp.txt của layer 34 có tên là ofm_0_zp.txt
+    sprintf(ofm_zp_file, "%sofm_0_zp.txt", base_path);
+    // Xuất ra file ofm riêng cho layer 34
+    sprintf(ofm_file, "%sofm34_c_sim.txt", base_path);
 
     // --- Đọc dữ liệu từ file --- (ĐÃ SỬA LỖI)
     printf("Reading input files...\n");
@@ -226,7 +228,7 @@ int main() {
             for (int w = 0; w < IFM_WIDTH; ++w) {
                 int padded_idx = (h + pad_top) * padded_ifm_width * IFM_CHANNEL + (w + pad_left) * IFM_CHANNEL + c;
                 int orig_idx = h * IFM_WIDTH * IFM_CHANNEL + w * IFM_CHANNEL + c;
-                padded_ifm[padded_idx] = ifm[orig_idx]; // KHÔNG trừ zp_in nữa vì ifm đã được xử lý từ lớp trước.
+                padded_ifm[padded_idx] = ifm[orig_idx] - zp_in; // Trừ ZP từ lớp trước
             }
         }
     }
@@ -261,13 +263,14 @@ int main() {
 
     // --- Xuất accumulator (int32) ra file để debug ---
     {
-        FILE* fp_acc = fopen("golden_verilog/op004_CONV_2D_accumulator_int32.txt", "w");
+        char acc_debug_file[256];
+        sprintf(acc_debug_file, "%saccumulator_int32_debug.txt", base_path);
+        FILE* fp_acc = fopen(acc_debug_file, "w");
         if (fp_acc) {
             int total = OFM_HEIGHT * OFM_WIDTH * OFM_CHANNEL;
             for (int i = 0; i < total; ++i)
                 fprintf(fp_acc, "%d\n", accumulator[i]);
             fclose(fp_acc);
-            printf("Debug: accumulator (int32 decimal) written.\n");
         }
     }
 

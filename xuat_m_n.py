@@ -95,27 +95,27 @@ def read_hex_file_weight(filename, shape):
 def main():
     # --- Cấu hình ---
     # Đường dẫn đến thư mục chứa các tham số đã trích xuất của layer
-    params_path = r'c:\Code c\Tensorflow\framework_tensorflow_lite_CNN\extracted_params\layer005_CONV_2D_1_stem_conv_1_BiasAdd_1_stem_conv_1_convolution_'
+    params_path = r'c:\Code c\Tensorflow\framework_tensorflow_lite_CNN\all_layer_io\layer_34_CONV_2D'
     
     # Đường dẫn đến thư mục để lưu các file output
     # Lưu trực tiếp vào thư mục params_path theo yêu cầu
     output_dir = params_path
 
     # Đường dẫn file output
-    output_m_file_path = os.path.join(output_dir, 'op005_m_values.txt')
-    output_n_file_path = os.path.join(output_dir, 'op005_n_values.txt')
-    output_eff_bias_path = os.path.join(output_dir, 'op005_effective_bias.txt')
+    output_m_file_path = os.path.join(output_dir, 'multiplier.txt')
+    output_n_file_path = os.path.join(output_dir, 'shift.txt')
+    output_eff_bias_path = os.path.join(output_dir, 'effective_bias.txt')
 
     # --- Đọc dữ liệu ---
     try:
         # Đường dẫn file scale
         scale_ifm_path = os.path.join(params_path, 'ifm_scale.txt')
-        scale_ofm_path = os.path.join(params_path, 'ofm_scale.txt')
+        scale_ofm_path = os.path.join(params_path, 'ofm_0_scale.txt') # Sửa tên file cho layer 34
         scale_w_path = os.path.join(params_path, 'weight_scale.txt')
 
         # Đường dẫn file cho effective bias
-        bias_values_path = os.path.join(params_path, 'bias_value.txt') # Chú ý: tên file là bias_value.txt
-        weight_values_path = os.path.join(params_path, 'weight_values.txt')
+        bias_values_path = os.path.join(params_path, 'bias.txt') # Sửa tên file cho layer 34
+        weight_values_path = os.path.join(params_path, 'weight.txt') # Sửa tên file cho layer 34
         ifm_zp_path = os.path.join(params_path, 'ifm_zp.txt')
 
         # Đọc scale
@@ -132,13 +132,13 @@ def main():
         with open(weight_values_path, "r") as f:
             num_weights = len(f.readlines())
         
-        # Giả định kernel là 3x3. 9 = 3*3
-        kernel_size_squared = 9 
+        # Layer 34 là conv 1x1
+        kernel_size_squared = 1
         if (num_weights % (kernel_size_squared * num_filters)) != 0:
             print(f"Lỗi: Số lượng weight ({num_weights}) không chia hết cho ({kernel_size_squared} * {num_filters}).")
             return
         ifm_channel = num_weights // (kernel_size_squared * num_filters)
-        weight_shape = (3, 3, ifm_channel, num_filters) # Giả định kernel 3x3
+        weight_shape = (1, 1, ifm_channel, num_filters) # Sửa thành kernel 1x1
         weight_data = read_hex_file_weight(weight_values_path, weight_shape)
 
     except FileNotFoundError as e:
