@@ -58,4 +58,4 @@ def compare_files_larger_points(file1, file2):
         print("Hai file giống hệt nhau!")
 
 # So sánh file output từ mô phỏng C và TFLite
-compare_files_larger_points("c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_27_MEAN\\ofm27_c_sim.txt", "c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_27_MEAN\\ofm27.txt")
+compare_files_larger_points("c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_10_HARD_SWISH\\ofm10.txt", "c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\all_layer_io\\layer_10_HARD_SWISH\\ofm10_c_sim.txt")

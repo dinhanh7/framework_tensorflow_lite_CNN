@@ -44,8 +44,8 @@ void quantized_hardswish(
     int n_relu;
     QuantizeMultiplier(real_relu_mul, &m_relu, &n_relu);
 
-    int16_t m_out_16 = clamp_int16(((int64_t)m_out + 32768) >> 16);
-    int16_t m_relu_16 = clamp_int16(((int64_t)m_relu + 32768) >> 16);
+    int16_t m_out_16 = clamp_int16(m_out >> 16);
+    int16_t m_relu_16 = clamp_int16(m_relu >> 16);
 
     printf("\n>> Inside quantized_hardswish - Calculated Params:\n");
     printf("   Output Mul: m_out_16=%d, n_out=%d\n", m_out_16, n_out);
@@ -78,10 +78,9 @@ void quantized_hardswish(
         // Convert to [0, 1] range in 16-bit
         reluish = (reluish + 32768) >> 1;
 
-        // 5. Final Multiplication
-        // Use of SaturatingDoublingHighMul_Int16_trunc here is important to cancel the biases
-        // from the above SaturatingRoundingDoublingHighMul_Int16_round.
-        const int16_t preshift_final = SaturatingDoublingHighMul_Int16_trunc(reluish, preshift_out);
+        // 5. Final Multiplication (LOGIC MỚI)
+        // Sử dụng phiên bản CÓ LÀM TRÒN (_round) để khớp với hành vi thực tế của file Python tham chiếu.
+        const int16_t preshift_final = SaturatingRoundingDoublingHighMul_Int16_round(reluish, preshift_out);
 
         // 6. Output Rescale (Shift Right)
         int16_t val_final = preshift_final;
@@ -91,8 +90,9 @@ void quantized_hardswish(
             val_final = SaturatingLeftShift(val_final, n_out);
         }
 
-        // 7. Add Output ZP and Clip
-        int32_t final_val_32 = val_final + output_zp;
+        // 7. No Add Output ZP and Clip (LOGIC MỚI)
+        // Vì ofm là (ofm - zp), nó sẽ được dùng làm (ifm - zp) cho layer tiếp theo.
+        int32_t final_val_32 = val_final;
         output_data[i] = clip_int8(final_val_32);
     }
 }
