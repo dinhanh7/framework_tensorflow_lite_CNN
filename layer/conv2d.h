@@ -10,9 +10,9 @@
 /**
  * @brief Thực hiện một lớp tích chập 2D lượng tử hóa đầy đủ.
  * 
- * Hàm này bao gồm tất cả các bước: đệm (padding), tích chập, cộng effective bias,
+ * Hàm này bao gồm tất cả các bước: đệm (padding), tích chập, cộng bias thường,
  * tái lượng tử hóa (re-quantization) và kẹp giá trị (clipping).
- * Logic được sao chép chính xác từ conv_in_tflite.c để đảm bảo kết quả tương đồng.
+ * Logic được sao chép chính xác từ fix_conv_in_tf_lite.c để đảm bảo kết quả tương đồng.
  *
  * @param ofm_data Con trỏ đến buffer để lưu trữ bản đồ đặc trưng đầu ra (OFM). Buffer này phải được cấp phát từ bên ngoài.
  * @param out_ofm_height Con trỏ để trả về chiều cao của OFM đã được tính toán.
@@ -25,7 +25,7 @@
  * @param ofm_channels Số kênh của OFM (cũng là số bộ lọc).
  * @param kernel_h Chiều cao của kernel.
  * @param kernel_w Chiều rộng của kernel.
- * @param effective_bias_data Con trỏ đến dữ liệu effective bias (int32).
+ * @param bias_data Con trỏ đến dữ liệu bias thường (int32).
  * @param output_multiplier Con trỏ đến mảng các giá trị số nhân tái lượng tử hóa (int32).
  * @param output_shift Con trỏ đến mảng các giá trị dịch bit tái lượng tử hóa (int8).
  * @param ifm_zp Điểm zero-point của IFM.
@@ -38,7 +38,7 @@ void quantized_conv2d(
     int8_t* ofm_data, int* out_ofm_height, int* out_ofm_width,
     const int8_t* ifm_data, int ifm_height, int ifm_width, int ifm_channels,
     const int8_t* weight_data, int ofm_channels, int kernel_h, int kernel_w,
-    const int32_t* effective_bias_data, const int32_t* output_multiplier, const int8_t* output_shift,
+    const int32_t* bias_data, const int32_t* output_multiplier, const int8_t* output_shift,
     int8_t ifm_zp, int8_t ofm_zp,
     int stride_h, int stride_w, const char* padding_type)
 {
@@ -80,7 +80,7 @@ void quantized_conv2d(
 
     // --- 3. Thực hiện Padding ---
     for(int i=0; i < padded_ifm_height * padded_ifm_width * ifm_channels; ++i) {
-        padded_ifm[i] = ifm_zp;
+        padded_ifm[i] = 0;  // Padding = 0 vì đã được xử lý ở lớp trước
     }
     for (int c = 0; c < ifm_channels; ++c) {
         for (int h = 0; h < ifm_height; ++h) {
@@ -114,10 +114,10 @@ void quantized_conv2d(
         }
     }
 
-    // --- 5. Cộng Effective Bias (giữ nguyên logic gốc) ---
+    // --- 5. Cộng Bias thường (không cộng effective_bias vì đã được xử lý ở lớp trước) ---
     for (int i = 0; i < ofm_height * ofm_width; ++i) {
         for (int oc = 0; oc < ofm_channels; ++oc) {
-            accumulator[i * ofm_channels + oc] += effective_bias_data[oc];
+            accumulator[i * ofm_channels + oc] += bias_data[oc];
         }
     }
 

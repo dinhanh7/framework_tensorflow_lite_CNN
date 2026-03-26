@@ -94,24 +94,29 @@ def read_hex_file_weight(filename, shape):
 
 def main():
     # --- Cấu hình ---
-    op_name = 'op004_CONV_2D'
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    base_path = os.path.join(script_dir, 'golden_verilog')
-    output_m_file_path = 'm_values_op004.txt'
-    output_n_file_path = 'n_values_op004.txt'
-    output_eff_bias_path = 'effective_bias_op004.txt' # File mới
+    # Đường dẫn đến thư mục chứa các tham số đã trích xuất của layer
+    params_path = r'c:\Code c\Tensorflow\framework_tensorflow_lite_CNN\extracted_params\layer005_CONV_2D_1_stem_conv_1_BiasAdd_1_stem_conv_1_convolution_'
+    
+    # Đường dẫn đến thư mục để lưu các file output
+    # Lưu trực tiếp vào thư mục params_path theo yêu cầu
+    output_dir = params_path
+
+    # Đường dẫn file output
+    output_m_file_path = os.path.join(output_dir, 'op005_m_values.txt')
+    output_n_file_path = os.path.join(output_dir, 'op005_n_values.txt')
+    output_eff_bias_path = os.path.join(output_dir, 'op005_effective_bias.txt')
 
     # --- Đọc dữ liệu ---
     try:
         # Đường dẫn file scale
-        scale_ifm_path = os.path.join(base_path, f'{op_name}_ifm_scale.hex')
-        scale_ofm_path = os.path.join(base_path, f'{op_name}_ofm_scale.hex')
-        scale_w_path = os.path.join(base_path, f'{op_name}_weight_scale.hex')
+        scale_ifm_path = os.path.join(params_path, 'ifm_scale.txt')
+        scale_ofm_path = os.path.join(params_path, 'ofm_scale.txt')
+        scale_w_path = os.path.join(params_path, 'weight_scale.txt')
 
         # Đường dẫn file cho effective bias
-        bias_values_path = os.path.join(base_path, f'{op_name}_bias_values.hex')
-        weight_values_path = os.path.join(base_path, f'{op_name}_weight_values.hex')
-        ifm_zp_path = os.path.join(base_path, f'{op_name}_ifm_zp.hex')
+        bias_values_path = os.path.join(params_path, 'bias_value.txt') # Chú ý: tên file là bias_value.txt
+        weight_values_path = os.path.join(params_path, 'weight_values.txt')
+        ifm_zp_path = os.path.join(params_path, 'ifm_zp.txt')
 
         # Đọc scale
         scale_ifm = read_float_file(scale_ifm_path)
@@ -127,16 +132,18 @@ def main():
         with open(weight_values_path, "r") as f:
             num_weights = len(f.readlines())
         
-        if (num_weights % (9 * num_filters)) != 0:
-            print(f"Lỗi: Số lượng weight ({num_weights}) không chia hết cho (9 * {num_filters}).")
+        # Giả định kernel là 3x3. 9 = 3*3
+        kernel_size_squared = 9 
+        if (num_weights % (kernel_size_squared * num_filters)) != 0:
+            print(f"Lỗi: Số lượng weight ({num_weights}) không chia hết cho ({kernel_size_squared} * {num_filters}).")
             return
-        ifm_channel = num_weights // (9 * num_filters)
-        weight_shape = (3, 3, ifm_channel, num_filters)
+        ifm_channel = num_weights // (kernel_size_squared * num_filters)
+        weight_shape = (3, 3, ifm_channel, num_filters) # Giả định kernel 3x3
         weight_data = read_hex_file_weight(weight_values_path, weight_shape)
 
     except FileNotFoundError as e:
         print(f"Lỗi: Không tìm thấy file cần thiết. {e}")
-        print(f"Đảm bảo các file tồn tại trong thư mục '{base_path}'.")
+        print(f"Đảm bảo các file tồn tại trong thư mục '{params_path}'.")
         return
 
     # --- Tính toán m, n ---
