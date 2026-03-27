@@ -6,14 +6,14 @@
 #include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
-#define IFM_H 28
-#define IFM_W 28
-#define IFM_C 48
-#define KERNEL_H 3
-#define KERNEL_W 3
+#define IFM_H 56
+#define IFM_W 56
+#define IFM_C 64
+#define KERNEL_H 1
+#define KERNEL_W 1
 #define STRIDE_H 1
 #define STRIDE_W 1
-#define OFM_C 192
+#define OFM_C 32
 #define PADDING_TYPE "SAME"
 
 // Helper function to read int array from text file
@@ -87,8 +87,8 @@ int main() {
 
     // 2. Read Quantization Parameters
     // Paths assumed correct relative to execution dir
-    char params_dir[] = "extracted_params/layer019_CONV_2D_1_block3b_expand_conv_1_BiasAdd_1_block3b_expand_conv_1_convolution_1_block3b_expand_conv_1_Squeeze";
-    char input_dir[] = "all_layer_io/layer_19_CONV_2D";
+    char params_dir[] = "extracted_params_hsigmoid/layer011_CONV_2D_1_block2a_project_conv_1_BiasAdd_1_block2a_project_conv_1_convo";
+    char input_dir[] = "all_layer_io/layer_11_CONV_2D";
     char path_buf[512];
 
     // Read scalars
@@ -180,7 +180,7 @@ int main() {
     printf("Inference done. Output shape: %d x %d x %d\n", out_h_check, out_w_check, OFM_C);
 
     // 7. Save Result to Params Dir
-    sprintf(path_buf, "%s/ofm.txt", params_dir);
+    sprintf(path_buf, "%s/ofm_c_sim.txt", params_dir);
     FILE* f_out = fopen(path_buf, "w");
     if (f_out) {
         int total_count = out_h_check * out_w_check * OFM_C;
