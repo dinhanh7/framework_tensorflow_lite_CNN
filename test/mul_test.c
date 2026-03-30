@@ -67,8 +67,8 @@ void read_double_array(const char* filename, double* buffer, int size) {
     }
     for (int i = 0; i < size; i++) {
         if (fscanf(f, "%lf", &buffer[i]) != 1) {
-             printf("Error reading double at index %d from %s\n", i, filename);
-             break;
+            printf("Error reading double at index %d from %s\n", i, filename);
+            break;
         }
     }
     fclose(f);
@@ -84,8 +84,8 @@ void read_int8_array(const char* filename, int8_t* buffer, int size) {
     int temp;
     for (int i = 0; i < size; i++) {
         if (fscanf(f, "%d", &temp) != 1) {
-             printf("Error reading int8 at index %d from %s\n", i, filename);
-             break;
+            printf("Error reading int8 at index %d from %s\n", i, filename);
+            break;
         }
         buffer[i] = (int8_t)temp;
     }
@@ -153,7 +153,7 @@ int main() {
     read_int8_array(path_buf, input1_data, size1);
 
     // 3. Configure ArithmeticParams
-    ArithmeticParams params;
+    MulArithmeticParams params;
     
     // Calculate Multiplier and Shift
     // Double Multiplier = (S1 * S2) / Sout
@@ -175,8 +175,8 @@ int main() {
     params.quantized_activation_max = 127;
 
     printf("Params: M=%d, Shift=%d, In1Off=%d, In2Off=%d, OutOff=%d\n", 
-           params.output_multiplier, params.output_shift, 
-           params.input1_offset, params.input2_offset, params.output_offset);
+        params.output_multiplier, params.output_shift, 
+        params.input1_offset, params.input2_offset, params.output_offset);
 
     // 4. Run MUL
     int8_t* output_data = NULL;
@@ -192,43 +192,43 @@ int main() {
         // Trường hợp đặc biệt: Input0 lớn (tensor), Input1 nhỏ (vector kênh)
         // Ví dụ: [14, 14, 384] * [384]
         if (size0 > size1 && size0 % size1 == 0) {
-             output_size = size0;
-             output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
-             
-             // Gọi hàm BroadcastMulInt8 mới (đã sửa trong mul.h)
-             // Lưu ý: Hàm này không dùng NdArrayDesc nữa mà dùng size trực tiếp
-             BroadcastMulInt8(&params, 
-                              input0_data, size0, 
-                              input1_data, size1, 
-                              output_data);
+            output_size = size0;
+            output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
+            
+            // Gọi hàm BroadcastMulInt8 mới (đã sửa trong mul.h)
+            // Lưu ý: Hàm này không dùng NdArrayDesc nữa mà dùng size trực tiếp
+            BroadcastMulInt8(&params, 
+                            input0_data, size0, 
+                            input1_data, size1, 
+                            output_data);
                               
         } else if (size1 > size0 && size1 % size0 == 0) {
             // Trường hợp ngược lại: Input1 lớn, Input0 nhỏ
-             output_size = size1;
-             output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
+            output_size = size1;
+            output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
+            
+            // Swap inputs logic 
+            // arithmetic is commutative for mul, so just swap data pointers and sizes
+            // BUT params offsets correspond to input1/input2. Need to swap offsets temporarily?
+            // Multiplication: (in1+off1) * (in2+off2). 
+            // Swapping data => (in2+off1) * (in1+off2). WRONG.
+            // We need to tell the function to use correct offsets.
+            // But our simple function assumes Input1 is the big one.
+            // So we should construct a temporary struct with swapped offsets.
              
-             // Swap inputs logic 
-             // arithmetic is commutative for mul, so just swap data pointers and sizes
-             // BUT params offsets correspond to input1/input2. Need to swap offsets temporarily?
-             // Multiplication: (in1+off1) * (in2+off2). 
-             // Swapping data => (in2+off1) * (in1+off2). WRONG.
-             // We need to tell the function to use correct offsets.
-             // But our simple function assumes Input1 is the big one.
-             // So we should construct a temporary struct with swapped offsets.
-             
-             ArithmeticParams params_swapped = params;
-             params_swapped.input1_offset = params.input2_offset;
-             params_swapped.input2_offset = params.input1_offset;
-             
-             BroadcastMulInt8(&params_swapped, 
-                              input1_data, size1, 
-                              input0_data, size0, 
-                              output_data);
+            MulArithmeticParams params_swapped = params;
+            params_swapped.input1_offset = params.input2_offset;
+            params_swapped.input2_offset = params.input1_offset;
+            
+            BroadcastMulInt8(&params_swapped, 
+                            input1_data, size1, 
+                            input0_data, size0, 
+                            output_data);
 
         } else {
-             printf("Error: Unsupported broadcast shapes (must be multiple of each other).\n");
-             free(input0_data); free(input1_data);
-             return 1;
+            printf("Error: Unsupported broadcast shapes (must be multiple of each other).\n");
+            free(input0_data); free(input1_data);
+            return 1;
         }
     }
 

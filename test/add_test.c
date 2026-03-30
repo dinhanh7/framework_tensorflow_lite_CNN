@@ -67,7 +67,7 @@ void write_data(const char* filepath, int8_t* buffer, int size) {
 void CalculateArithmeticParams(float input1_scale, int32_t input1_zp,
                                float input2_scale, int32_t input2_zp,
                                float output_scale, int32_t output_zp,
-                               struct ArithmeticParams* params) {
+                               struct AddArithmeticParams* params) {
     params->input1_zp = input1_zp;
     params->input2_zp = input2_zp;
     params->output_zp = output_zp;
@@ -124,10 +124,10 @@ int main() {
     // 2. Prepare Arithmetic Params
     // Important: input_zp are offsets to add to the value.
     // In quantization formula: R = (Q - Z) * S. So offset = -Z.
-    struct ArithmeticParams params;
+    struct AddArithmeticParams params;
     CalculateArithmeticParams(ifm_scale, -ifm_zp, w_scale, -w_zp, ofm_scale, ofm_zp, &params);
     
-    printf("\nCalculated Arithmetic Params:\n");
+    printf("\nCalculated Add Arithmetic Params:\n");
     printf("input1_mult: %d, shift: %d\n", params.input1_multiplier, params.input1_shift);
     printf("input2_mult: %d, shift: %d\n", params.input2_multiplier, params.input2_shift);
     printf("output_mult: %d, shift: %d\n", params.output_multiplier, params.output_shift);

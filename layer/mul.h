@@ -16,7 +16,7 @@ typedef struct {
     int32_t output_shift;
     int32_t quantized_activation_min;
     int32_t quantized_activation_max;
-} ArithmeticParams;
+} MulArithmeticParams;
 
 
 // ----------------------------------------------------------------------------
@@ -30,7 +30,7 @@ typedef struct {
 // Luồng 1: Linear Memory Element-wise Multiplication
 // ----------------------------------------------------------------------------
 // Dùng khi shape của 2 tensor giống hệt nhau (flat memory array).
-void MulElementwiseInt8(int size, const ArithmeticParams* params,
+void MulElementwiseInt8(int size, const MulArithmeticParams* params,
                         const int8_t* input1_data, const int8_t* input2_data,
                         int8_t* output_data) {
     for (int i = 0; i < size; ++i) {
@@ -57,7 +57,7 @@ void MulElementwiseInt8(int size, const ArithmeticParams* params,
 // Luồng 2: Strided Broadcast Multiplication (6D Slow)
 // ----------------------------------------------------------------------------
 // Dùng khi 2 tensor lệch shape (vd: [1, 64, 64, 3] x [3]). Yêu cầu padding ảo.
-void BroadcastMulInt8(const ArithmeticParams* params,
+void BroadcastMulInt8(const MulArithmeticParams* params,
                             const int8_t* input1_data,
                             int input1_size,
                             const int8_t* input2_data,

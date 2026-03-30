@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "requantize_utils.h"
+#include "utils.h"
+
 
 /**
  * @brief Thực hiện một lớp tích chập 2D lượng tử hóa đầy đủ.

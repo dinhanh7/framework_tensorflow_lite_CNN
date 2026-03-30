@@ -9,15 +9,15 @@
 // Helper Functions (File I/O)
 // ============================================================================
 
-int count_elements(const char* filename) {
-    FILE* f = fopen(filename, "r");
-    if (!f) return -1;
-    int count = 0;
-    int temp;
-    while (fscanf(f, "%d", &temp) == 1) count++;
-    fclose(f);
-    return count;
-}
+// int count_elements(const char* filename) {
+//     FILE* f = fopen(filename, "r");
+//     if (!f) return -1;
+//     int count = 0;
+//     int temp;
+//     while (fscanf(f, "%d", &temp) == 1) count++;
+//     fclose(f);
+//     return count;
+// }
 
 void read_int8_array(const char* filename, int8_t* buffer, int size) {
     FILE* f = fopen(filename, "r");
