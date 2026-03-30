@@ -6,71 +6,18 @@
 #include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
-#define IFM_H 56
-#define IFM_W 56
-#define IFM_C 64
-#define KERNEL_H 1
-#define KERNEL_W 1
+#define IFM_H 112
+#define IFM_W 112
+#define IFM_C 32
+#define KERNEL_H 3
+#define KERNEL_W 3
 #define STRIDE_H 1
 #define STRIDE_W 1
-#define OFM_C 32
+#define OFM_C 16
 #define PADDING_TYPE "SAME"
 
-// Helper function to read int array from text file
-void read_int_array(const char* filename, int32_t* buffer, int size) {
-    FILE* f = fopen(filename, "r");
-    if (!f) {
-        printf("Error opening file: %s\n", filename);
-        exit(1);
-    }
-    for (int i = 0; i < size; i++) {
-        if (fscanf(f, "%d", &buffer[i]) != 1) {
-            printf("Error reading int at index %d from %s\n", i, filename);
-            break;
-        }
-    }
-    fclose(f);
-}
 
-// Helper function to read float array from text file
-void read_float_array(const char* filename, float* buffer, int size) {
-    FILE* f = fopen(filename, "r");
-    if (!f) {
-        printf("Error opening file: %s\n", filename);
-        exit(1);
-    }
-    for (int i = 0; i < size; i++) {
-        if (fscanf(f, "%f", &buffer[i]) != 1) {
-            printf("Error reading float at index %d from %s\n", i, filename);
-            break;
-        }
-    }
-    fclose(f);
-}
 
-// Helper function to read int8 array from text file
-void read_int8_array(const char* filename, int8_t* buffer, int size) {
-    FILE* f = fopen(filename, "r");
-    if (!f) {
-        printf("Error opening file: %s\n", filename);
-        exit(1);
-    }
-    int temp;
-    for (int i = 0; i < size; i++) {
-        if (fscanf(f, "%d", &temp) != 1) {
-             // Try reading as float and casting if int fails? 
-             // Usually file has integer values like "-12"
-             // But sometimes numpy text save uses float format "0.000"
-             float ftemp;
-             rewind(f); // Just in case, but complicated.
-             // Let's assume int format first.
-             printf("Error reading int8 at index %d from %s\n", i, filename);
-             break;
-        }
-        buffer[i] = (int8_t)temp;
-    }
-    fclose(f);
-}
 
 
 int main() {
@@ -87,8 +34,8 @@ int main() {
 
     // 2. Read Quantization Parameters
     // Paths assumed correct relative to execution dir
-    char params_dir[] = "extracted_params_hsigmoid/layer011_CONV_2D_1_block2a_project_conv_1_BiasAdd_1_block2a_project_conv_1_convo";
-    char input_dir[] = "all_layer_io/layer_11_CONV_2D";
+    char params_dir[] = "extracted_params_hsigmoid/layer007_CONV_2D_1_block1a_project_conv_1_BiasAdd_1_block1a_project_conv_1_convo";
+    char input_dir[] = "all_layer_io/layer_7_CONV_2D";
     char path_buf[512];
 
     // Read scalars

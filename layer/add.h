@@ -11,7 +11,7 @@ struct RuntimeShape {
     const int32_t* dims_data;
 };
 
-struct ArithmeticParams {
+struct AddArithmeticParams {
     int32_t input1_zp;
     int32_t input2_zp;
     int32_t output_zp;
@@ -31,7 +31,29 @@ struct ArithmeticParams {
     int32_t quantized_activation_max;
 };
 
+// Helper: Calculate Arithmetic Params for ADD
+void CalculateAddArithmeticParams(float input1_scale, int32_t input1_zp,
+                               float input2_scale, int32_t input2_zp,
+                               float output_scale, int32_t output_zp,
+                               struct AddArithmeticParams* params) {
+    params->input1_zp = input1_zp;
+    params->input2_zp = input2_zp;
+    params->output_zp = output_zp;
+    
+    params->left_shift = 20;
 
+    double twice_max_input_scale = 2 * (input1_scale > input2_scale ? input1_scale : input2_scale);
+    double real_input1_multiplier = input1_scale / twice_max_input_scale;
+    double real_input2_multiplier = input2_scale / twice_max_input_scale;
+    double real_output_multiplier = twice_max_input_scale / ((1 << params->left_shift) * output_scale);
+
+    QuantizeMultiplier(real_input1_multiplier, &params->input1_multiplier, &params->input1_shift);
+    QuantizeMultiplier(real_input2_multiplier, &params->input2_multiplier, &params->input2_shift);
+    QuantizeMultiplier(real_output_multiplier, &params->output_multiplier, &params->output_shift);
+
+    params->quantized_activation_min = -128;
+    params->quantized_activation_max = 127;
+}
 // Hàm này tương đương MultiplyByQuantizedMultiplier của TFLite
 // Đã được thay thế bằng include "requantize_utils.h"
 
@@ -48,7 +70,7 @@ static inline int MatchingElementsSize(const struct RuntimeShape* shape1,
 
 
 // 3. Hàm AddFunc: Trái tim toán học của toàn bộ file
-static inline void AddFunc(const struct ArithmeticParams* params,
+static inline void AddFunc(const struct AddArithmeticParams* params,
                            int8_t input1_val, int8_t input2_val,
                            int8_t* output_val) {
     // Bước 1: Thêm zp cho đầu vào
@@ -83,7 +105,7 @@ static inline void AddFunc(const struct ArithmeticParams* params,
 
 // 4. Hàm AddElementwise: Thiết lập vòng lặp duyệt qua tất cả các phần tử
 static inline void AddElementwise(int total_elements,
-                                  const struct ArithmeticParams* params,
+                                  const struct AddArithmeticParams* params,
                                   const int8_t* input1_data,
                                   const int8_t* input2_data,
                                   int8_t* output_data) {
@@ -94,7 +116,7 @@ static inline void AddElementwise(int total_elements,
 }
 
 // 5. Hàm Add: Giao diện chính
-static inline void Add(const struct ArithmeticParams* params,
+static inline void Add(const struct AddArithmeticParams* params,
                        const struct RuntimeShape* input1_shape, const int8_t* input1_data,
                        const struct RuntimeShape* input2_shape, const int8_t* input2_data,
                        const struct RuntimeShape* output_shape, int8_t* output_data) {

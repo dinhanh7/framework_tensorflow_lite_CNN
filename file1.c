@@ -1,778 +1,496 @@
 /**
  * ============================================================================
  * TFLite Model Sequence Simulator - EfficientNetV2 B0 (INT8)
- * Layers 4 ~ 94
+ * Layers 4 ~ 94 using the run_*_layer refactor pattern
  * ============================================================================
  * 
  * QUAN TRỌNG: Chỉ số layer
  * - Model layer bắt đầu từ 0 → Layer K (model) = Layer K+1 (params folder)
- * - Layer 4 (model) = layer005_... (params folder)
- * - Layer 94 (model) = layer095_... (params folder)
+ * - Layer 4 (model) uses layer005_... (params folder)
+ * - Layer 94 (model) uses layer095_... (params folder)
  * 
  * Chiến lược xử lý shape layers:
  * - RESHAPE, SHAPE, STRIDED_SLICE, PACK → Không thay đổi dữ liệu, chỉ skip
  * ============================================================================
  */
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <math.h>
+#include "layer/layer_helper.h"
 
-// Include layer headers
-#include "layer/conv2d.h"
-#include "layer/hardswish.h"
-#include "layer/dw_conv.h"
-#include "layer/add.h"
-#include "layer/mul.h"
-#include "layer/mean.h"
-#include "layer/reshape.h"
+static int8_t* load_input_tensor(const char* path, int* input_size) {
+    int size = count_elements(path);
+    int8_t* input_data = (int8_t*)malloc(size * sizeof(int8_t));
 
-// ============================================================================
-// CONFIG & CONSTANTS
-// ============================================================================
-
-#define DATA_PATH "extracted_params_hsigmoid/"
-#define IFM_FILE "all_layer_io/layer_5_CONV_2D/ifm.txt"
-
-// Tensor structure
-typedef struct {
-    int8_t* data;
-    int height, width, channels, batch;
-    float scale;
-    int32_t zp;
-} Tensor;
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-Tensor* allocate_tensor(int batch, int height, int width, int channels,
-                       float scale, int32_t zp) {
-    Tensor* t = (Tensor*)malloc(sizeof(Tensor));
-    int size = batch * height * width * channels;
-    t->data = (int8_t*)malloc(size * sizeof(int8_t));
-    t->batch = batch;
-    t->height = height;
-    t->width = width;
-    t->channels = channels;
-    t->scale = scale;
-    t->zp = zp;
-    return t;
-}
-
-void free_tensor(Tensor* t) {
-    if (t) {
-        if (t->data) free(t->data);
-        free(t);
-    }
-}
-
-int8_t* read_quantized_values(const char* filepath, int expected_size) {
-    FILE* f = fopen(filepath, "r");
-    if (!f) {
-        printf("ERROR: Cannot open %s\n", filepath);
+    if (!input_data) {
         return NULL;
     }
-    
-    int8_t* data = (int8_t*)malloc(expected_size * sizeof(int8_t));
-    for (int i = 0; i < expected_size; i++) {
-        int val;
-        if (fscanf(f, "%d", &val) != 1) {
-            printf("ERROR: Read failed at index %d in %s\n", i, filepath);
-            fclose(f);
-            free(data);
-            return NULL;
-        }
-        data[i] = (int8_t)val;
+
+    read_int8_array(path, input_data, size);
+    if (input_size) {
+        *input_size = size;
     }
-    fclose(f);
-    return data;
+
+    return input_data;
 }
-
-int32_t read_int32_value(const char* filepath) {
-    FILE* f = fopen(filepath, "r");
-    if (!f) return 0;
-    int32_t val = 0;
-    fscanf(f, "%d", &val);
-    fclose(f);
-    return val;
-}
-
-float read_float_value(const char* filepath) {
-    FILE* f = fopen(filepath, "r");
-    if (!f) return 0.0f;
-    float val = 0.0f;
-    fscanf(f, "%f", &val);
-    fclose(f);
-    return val;
-}
-
-int32_t* read_int32_array(const char* filepath, int expected_size) {
-    FILE* f = fopen(filepath, "r");
-    if (!f) return NULL;
-    
-    int32_t* data = (int32_t*)malloc(expected_size * sizeof(int32_t));
-    for (int i = 0; i < expected_size; i++) {
-        if (fscanf(f, "%d", &data[i]) != 1) {
-            printf("ERROR: Read failed at index %d in %s\n", i, filepath);
-            fclose(f);
-            free(data);
-            return NULL;
-        }
-    }
-    fclose(f);
-    return data;
-}
-
-Tensor* load_input_from_file(const char* filepath, int batch, int height, 
-                             int width, int channels, float scale, int32_t zp) {
-    int size = batch * height * width * channels;
-    int8_t* data = read_quantized_values(filepath, size);
-    if (!data) return NULL;
-    
-    Tensor* t = (Tensor*)malloc(sizeof(Tensor));
-    t->data = data;
-    t->batch = batch;
-    t->height = height;
-    t->width = width;
-    t->channels = channels;
-    t->scale = scale;
-    t->zp = zp;
-    return t;
-}
-
-// ============================================================================
-// LAYER EXECUTION FUNCTIONS
-// ============================================================================
-
-/**
- * Generic CONV2D execution
- */
-Tensor* layer_conv2d(Tensor* input, const char* param_folder, 
-                     int out_h, int out_w, int out_ch,
-                     int kernel_h, int kernel_w, int stride_h, int stride_w,
-                     int layer_num) {
-    printf("\n=== [LAYER %d] CONV_2D (k=%d, s=%d) ===\n", 
-           layer_num, kernel_h, stride_h);
-    fflush(stdout);
-    
-    char path[512];
-    int weight_size = kernel_h * kernel_w * input->channels * out_ch;
-    
-    sprintf(path, "%s%s/weight_values.txt", DATA_PATH, param_folder);
-    int8_t* weights = read_quantized_values(path, weight_size);
-    
-    sprintf(path, "%s%s/effective_bias.txt", DATA_PATH, param_folder);
-    int32_t* eff_bias = read_int32_array(path, out_ch);
-    
-    sprintf(path, "%s%s/multiplier.txt", DATA_PATH, param_folder);
-    int32_t* mult = read_int32_array(path, out_ch);
-    
-    sprintf(path, "%s%s/shift.txt", DATA_PATH, param_folder);
-    int8_t* shft = read_quantized_values(path, out_ch);
-    
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    Tensor* output = allocate_tensor(1, out_h, out_w, out_ch, ofm_scale, ofm_zp);
-    int out_h_calc, out_w_calc;
-    
-    quantized_conv2d(output->data, &out_h_calc, &out_w_calc,
-        input->data, input->height, input->width, input->channels,
-        weights, out_ch, kernel_h, kernel_w,
-        eff_bias, mult, shft, input->zp, ofm_zp,
-        stride_h, stride_w, "SAME");
-    
-    free(weights);
-    free(eff_bias);
-    free(mult);
-    free(shft);
-    
-    return output;
-}
-
-/**
- * Generic HARD_SWISH execution
- */
-Tensor* layer_hardswish(Tensor* input, const char* param_folder, int layer_num) {
-    printf("\n=== [LAYER %d] HARD_SWISH ===\n", layer_num);
-    fflush(stdout);
-    
-    char path[512];
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    int size = input->batch * input->height * input->width * input->channels;
-    Tensor* output = allocate_tensor(input->batch, input->height,
-                                    input->width, input->channels,
-                                    ofm_scale, ofm_zp);
-    
-    quantized_hardswish(input->data, output->data, size,
-        input->zp, ofm_zp, input->scale, ofm_scale);
-    
-    return output;
-}
-
-/**
- * Generic ADD execution (skip connection)
- */
-Tensor* layer_add(Tensor* main, Tensor* skip, const char* param_folder, int layer_num) {
-    printf("\n=== [LAYER %d] ADD (Skip Connection) ===\n", layer_num);
-    fflush(stdout);
-    
-    char path[512];
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    int size = main->batch * main->height * main->width * main->channels;
-    Tensor* output = allocate_tensor(main->batch, main->height,
-                                    main->width, main->channels,
-                                    ofm_scale, ofm_zp);
-    
-    // Simple add with saturation
-    for (int i = 0; i < size; i++) {
-        int32_t val = (int32_t)main->data[i] + (int32_t)skip->data[i];
-        output->data[i] = (int8_t)(val > 127 ? 127 : (val < -128 ? -128 : val));
-    }
-    
-    return output;
-}
-
-/**
- * Skip shape operations (just reuse data pointer with new shape metadata)
- */
-Tensor* layer_skip_shape(Tensor* input, int new_h, int new_w, int new_ch,
-                         int layer_num, const char* op_name) {
-    printf("\n=== [LAYER %d] %s (SKIP - shape only) ===\n", layer_num, op_name);
-    fflush(stdout);
-    
-    Tensor* output = (Tensor*)malloc(sizeof(Tensor));
-    output->data = input->data;  // Reuse same data pointer
-    output->batch = input->batch;
-    output->height = new_h;
-    output->width = new_w;
-    output->channels = new_ch;
-    output->scale = input->scale;
-    output->zp = input->zp;
-    
-    return output;
-}
-
-/**
- * Generic DEPTHWISE_CONV_2D execution
- */
-Tensor* layer_depthwise_conv2d(Tensor* input, const char* param_folder,
-                               int out_h, int out_w, int out_ch,
-                               int kernel_h, int kernel_w, int stride_h, int stride_w,
-                               int layer_num) {
-    printf("\n=== [LAYER %d] DEPTHWISE_CONV_2D (k=%d, s=%d) ===\n",
-           layer_num, kernel_h, stride_h);
-    fflush(stdout);
-    
-    char path[512];
-    int weight_size = kernel_h * kernel_w * out_ch;  // For DW: [1, H, W, C]
-    
-    sprintf(path, "%s%s/weight_values.txt", DATA_PATH, param_folder);
-    int8_t* weights = read_quantized_values(path, weight_size);
-    
-    sprintf(path, "%s%s/effective_bias.txt", DATA_PATH, param_folder);
-    int32_t* eff_bias = read_int32_array(path, out_ch);
-    
-    sprintf(path, "%s%s/multiplier.txt", DATA_PATH, param_folder);
-    int32_t* mult = read_int32_array(path, out_ch);
-    
-    sprintf(path, "%s%s/shift.txt", DATA_PATH, param_folder);
-    int32_t* shft = read_int32_array(path, out_ch);
-    
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    Tensor* output = allocate_tensor(1, out_h, out_w, out_ch, ofm_scale, ofm_zp);
-    
-    // Setup DW params
-    DepthwiseParams params = { .input_zp = input->zp,
-        .output_zp = ofm_zp,
-        .quantized_activation_min = -128,
-        .quantized_activation_max = 127,
-        .stride_width = stride_w,
-        .stride_height = stride_h,
-        .pad_width = 0,
-        .pad_height = 0,
-        .dilation_width_factor = 1,
-        .dilation_height_factor = 1
-    };
-    
-    DepthwiseConvPerChannel(&params, mult, shft,
-        1, input->height, input->width, input->channels, input->data,
-        kernel_h, kernel_w, out_ch, weights,
-        out_ch, eff_bias,
-        out_h, out_w, out_ch, output->data,
-        NULL);  // output_acc = NULL
-    
-    free(weights);
-    free(eff_bias);
-    free(mult);
-    free(shft);
-    
-    return output;
-}
-
-/**
- * Generic MEAN execution (SE block squeeze)
- */
-Tensor* layer_mean(Tensor* input, const char* param_folder, int layer_num) {
-    printf("\n=== [LAYER %d] MEAN (Global avg pool) ===\n", layer_num);
-    fflush(stdout);
-    
-    char path[512];
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    // MEAN output: [1, channels] from [1, H, W, channels]
-    Tensor* output = allocate_tensor(1, 1, input->channels, 1, ofm_scale, ofm_zp);
-    
-    quantized_mean_int8(input->data, output->data,
-        input->batch, input->height, input->width, input->channels,
-        input->channels, input->scale, input->zp, ofm_scale, ofm_zp);
-    
-    return output;
-}
-
-/**
- * Generic MUL execution (SE excitation)
- */
-Tensor* layer_mul(Tensor* input1, Tensor* input2, const char* param_folder, int layer_num) {
-    printf("\n=== [LAYER %d] MUL (SE excitation) ===\n", layer_num);
-    fflush(stdout);
-    
-    char path[512];
-    sprintf(path, "%s%s/ofm_scale.txt", DATA_PATH, param_folder);
-    float ofm_scale = read_float_value(path);
-    
-    sprintf(path, "%s%s/ofm_zp.txt", DATA_PATH, param_folder);
-    int32_t ofm_zp = read_int32_value(path);
-    
-    int size1 = input1->batch * input1->height * input1->width * input1->channels;
-    int size2 = input2->batch * input2->height * input2->width * input2->channels;
-    
-    Tensor* output = allocate_tensor(input1->batch, input1->height,
-                                    input1->width, input1->channels,
-                                    ofm_scale, ofm_zp);
-    
-    // Simple element-wise mul with broadcasting for SE
-    if (size2 == input2->channels && size1 % size2 == 0) {
-        // input2 is [1,1,1,C], broadcast to [1,H,W,C]
-        int idx2 = 0;
-        for (int i = 0; i < size1; i++) {
-            int32_t v1 = (int32_t)input1->data[i] - input1->zp;
-            int32_t v2 = (int32_t)input2->data[idx2] - input2->zp;
-            int32_t mul_result = (v1 * v2) / 256;
-            int32_t final = mul_result + ofm_zp;
-            output->data[i] = (int8_t)(final > 127 ? 127 : (final < -128 ? -128 : final));
-            idx2++;
-            if (idx2 >= size2) idx2 = 0;
-        }
-    } else {
-        // Direct element-wise
-        for (int i = 0; i < size1; i++) {
-            int32_t v1 = (int32_t)input1->data[i] - input1->zp;
-            int32_t v2 = (int32_t)input2->data[i] - input2->zp;
-            int32_t mul_result = (v1 * v2) / 256;
-            int32_t final = mul_result + ofm_zp;
-            output->data[i] = (int8_t)(final > 127 ? 127 : (final < -128 ? -128 : final));
-        }
-    }
-    
-    return output;
-}
-
-// ============================================================================
-// MAIN: MODEL SEQUENCE FROM LAYER 4 TO 94
-// ============================================================================
 
 int main() {
     printf("================================================================================\n");
     printf("TFLite Model Sequence: EfficientNetV2 B0 (INT8) - Layer 4 ~ Layer 94\n");
     printf("================================================================================\n\n");
     
-    // Load input file (Layer 4 input from IFM)
+    // Load input from file
     printf("[*] Loading input tensor from ifm.txt...\n");
-    float ifm_scale = 0.01865845f;  // From model_profile.txt - Layer 4 input
-    int32_t ifm_zp = -14;
-    
-    Tensor* layer_input = load_input_from_file(
-        IFM_FILE, 1, 224, 224, 3, ifm_scale, ifm_zp
-    );
-    
-    if (!layer_input) {
+    int input_size;
+    int8_t* layer_4_out = load_input_tensor("all_layer_io/layer_5_CONV_2D/ifm.txt", &input_size);
+    if (!layer_4_out) {
         printf("ERROR: Failed to load input tensor\n");
         return 1;
     }
-    
-    printf("✓ Input loaded: %d x %d x %d x %d\n\n",
-           layer_input->batch, layer_input->height, 
-           layer_input->width, layer_input->channels);
+    printf("✓ Input loaded: size = %d\n\n", input_size);
     fflush(stdout);
     
-    Tensor* current = layer_input;
-    Tensor* skip_l10 = NULL;  // For skip at layer 14
-    Tensor* skip_l17 = NULL;  // For skip at layer 21
-    Tensor* skip_l36 = NULL;  // For skip at layer 52
-    Tensor* skip_l80 = NULL;  // For skip at layer 95
+    // LAYER 4: CONV_2D (stem_conv_1) [1,224,224,3] -> [1,112,112,32]
+    printf("Starting Layer 4 CONV_2D...\n");
+    int conv5_out_h, conv5_out_w;
+    int8_t* layer_5_out = run_conv2d_layer("extracted_params_hsigmoid/layer005_CONV_2D_1_stem_conv_1_BiasAdd_1_stem_conv_1_convolution_", "all_layer_io/layer_5_CONV_2D",
+                                           layer_4_out, 224, 224, 3, 32, 3, 3, 2, 2, "SAME", &conv5_out_h, &conv5_out_w);
     
-    // ==== LAYER 4: CONV_2D (stem_conv_1) ====
-    Tensor* l4 = layer_conv2d(current, 
-        "layer005_CONV_2D_1_stem_conv_1_BiasAdd_1_stem_conv_1_convolution_",
-        112, 112, 32, 3, 3, 2, 2, 4);
-    if (current != layer_input) free_tensor(current);
-    current = l4;
+    // LAYER 5: HARD_SWISH
+    printf("Starting Layer 5 HARD_SWISH...\n");
+    int layer_6_size = conv5_out_h * conv5_out_w * 32;
+    int8_t* layer_6_out = run_hardswish_layer("extracted_params_hsigmoid/layer006_HARD_SWISH_1_stem_activation_1_truediv__1_stem_activation_1_Relu6_1_ste", "all_layer_io/layer_6_HARD_SWISH",
+                                             layer_5_out, &layer_6_size);
     
-    // ==== LAYER 5: HARD_SWISH ====
-    Tensor* l5 = layer_hardswish(current,
-        "layer006_HARD_SWISH_1_stem_activation_1_truediv__1_stem_activation_1_Relu6_1_ste", 5);
-    free_tensor(current);
-    current = l5;
+    // LAYER 6: CONV_2D (block1a_project_conv) [1,112,112,32] -> [1,112,112,16]
+    printf("Starting Layer 6 CONV_2D...\n");
+    int conv7_out_h, conv7_out_w;
+    int8_t* layer_7_out = run_conv2d_layer("extracted_params_hsigmoid/layer007_CONV_2D_1_block1a_project_conv_1_BiasAdd_1_block1a_project_conv_1_convo", "all_layer_io/layer_7_CONV_2D",
+                                           layer_6_out, 112, 112, 32, 16, 3, 3, 1, 1, "SAME", &conv7_out_h, &conv7_out_w);
     
-    // ==== LAYER 6: CONV_2D (block1a_project_conv) ====
-    Tensor* l6 = layer_conv2d(current,
-        "layer007_CONV_2D_1_block1a_project_conv_1_BiasAdd_1_block1a_project_conv_1_convo",
-        112, 112, 16, 3, 3, 1, 1, 6);
-    free_tensor(current);
-    current = l6;
+    // LAYER 7: HARD_SWISH
+    printf("Starting Layer 7 HARD_SWISH...\n");
+    int layer_8_size = conv7_out_h * conv7_out_w * 16;
+    int8_t* layer_8_out = run_hardswish_layer("extracted_params_hsigmoid/layer008_HARD_SWISH_1_block1a_project_activation_1_truediv__1_block1a_project_ac", "all_layer_io/layer_8_HARD_SWISH",
+                                             layer_7_out, &layer_8_size);
     
-    // ==== LAYER 7: HARD_SWISH ====
-    Tensor* l7 = layer_hardswish(current,
-        "layer008_HARD_SWISH_1_block1a_project_activation_1_truediv__1_block1a_project_ac", 7);
-    free_tensor(current);
-    current = l7;
+    // LAYER 8: CONV_2D (block2a_expand_conv) [1,112,112,16] -> [1,56,56,64]
+    printf("Starting Layer 8 CONV_2D...\n");
+    int conv9_out_h, conv9_out_w;
+    int8_t* layer_9_out = run_conv2d_layer("extracted_params_hsigmoid/layer009_CONV_2D_1_block2a_expand_conv_1_BiasAdd_1_block2a_expand_conv_1_convolu", "all_layer_io/layer_9_CONV_2D",
+                                           layer_8_out, 112, 112, 16, 64, 3, 3, 2, 2, "SAME", &conv9_out_h, &conv9_out_w);
     
-    // ==== LAYER 8: CONV_2D (block2a_expand_conv) ====
-    Tensor* l8 = layer_conv2d(current,
-        "layer009_CONV_2D_1_block2a_expand_conv_1_BiasAdd_1_block2a_expand_conv_1_convolu",
-        56, 56, 64, 3, 3, 2, 2, 8);
-    free_tensor(current);
-    current = l8;
+    // LAYER 9: HARD_SWISH
+    printf("Starting Layer 9 HARD_SWISH...\n");
+    int layer_10_size = conv9_out_h * conv9_out_w * 64;
+    int8_t* layer_10_out = run_hardswish_layer("extracted_params_hsigmoid/layer010_HARD_SWISH_1_block2a_expand_activation_1_truediv__1_block2a_expand_acti", "all_layer_io/layer_10_HARD_SWISH",
+                                              layer_9_out, &layer_10_size);
     
-    // ==== LAYER 9: HARD_SWISH ====
-    Tensor* l9 = layer_hardswish(current,
-        "layer010_HARD_SWISH_1_block2a_expand_activation_1_truediv__1_block2a_expand_acti", 9);
-    free_tensor(current);
-    current = l9;
+    // LAYER 10: CONV_2D (block2a_project_conv) [1,56,56,64] -> [1,56,56,32]
+    printf("Starting Layer 10 CONV_2D...\n");
+    int conv11_out_h, conv11_out_w;
+    int8_t* layer_11_out = run_conv2d_layer("extracted_params_hsigmoid/layer011_CONV_2D_1_block2a_project_conv_1_BiasAdd_1_block2a_project_conv_1_convo", "all_layer_io/layer_11_CONV_2D",
+                                            layer_10_out, 56, 56, 64, 32, 1, 1, 1, 1, "SAME", &conv11_out_h, &conv11_out_w);
     
-    // ==== LAYER 10: CONV_2D (block2a_project_conv) ====
-    Tensor* l10 = layer_conv2d(current,
-        "layer011_CONV_2D_1_block2a_project_conv_1_BiasAdd_1_block2a_project_conv_1_convo",
-        56, 56, 32, 1, 1, 1, 1, 10);
-    free_tensor(current);
-    current = l10;
-    skip_l10 = current;  // Save for skip at layer 14
+    // LAYER 11: CONV_2D (block2b_expand_conv) [1,56,56,32] -> [1,56,56,128]
+    printf("Starting Layer 11 CONV_2D...\n");
+    int conv12_out_h, conv12_out_w;
+    int8_t* layer_12_out = run_conv2d_layer("extracted_params_hsigmoid/layer012_CONV_2D_1_block2b_expand_conv_1_BiasAdd_1_block2b_expand_conv_1_convolu", "all_layer_io/layer_12_CONV_2D",
+                                            layer_11_out, 56, 56, 32, 128, 3, 3, 1, 1, "SAME", &conv12_out_h, &conv12_out_w);
     
-    // ==== LAYER 11: CONV_2D (block2b_expand_conv) ====
-    Tensor* l11 = layer_conv2d(current,
-        "layer012_CONV_2D_1_block2b_expand_conv_1_BiasAdd_1_block2b_expand_conv_1_convolu",
-        56, 56, 128, 3, 3, 1, 1, 11);
-    free_tensor(current);
-    current = l11;
+    // LAYER 12: HARD_SWISH
+    printf("Starting Layer 12 HARD_SWISH...\n");
+    int layer_13_size = conv12_out_h * conv12_out_w * 128;
+    int8_t* layer_13_out = run_hardswish_layer("extracted_params_hsigmoid/layer013_HARD_SWISH_1_block2b_expand_activation_1_truediv__1_block2b_expand_acti", "all_layer_io/layer_13_HARD_SWISH",
+                                              layer_12_out, &layer_13_size);
     
-    // ==== LAYER 12: HARD_SWISH ====
-    Tensor* l12 = layer_hardswish(current,
-        "layer013_HARD_SWISH_1_block2b_expand_activation_1_truediv__1_block2b_expand_acti", 12);
-    free_tensor(current);
-    current = l12;
+    // LAYER 13: CONV_2D (block2b_project_conv) [1,56,56,128] -> [1,56,56,32]
+    printf("Starting Layer 13 CONV_2D...\n");
+    int conv14_out_h, conv14_out_w;
+    int8_t* layer_14_out = run_conv2d_layer("extracted_params_hsigmoid/layer014_CONV_2D_1_block2b_project_conv_1_BiasAdd_1_block2b_project_conv_1_convo", "all_layer_io/layer_14_CONV_2D",
+                                            layer_13_out, 56, 56, 128, 32, 1, 1, 1, 1, "SAME", &conv14_out_h, &conv14_out_w);
     
-    // ==== LAYER 13: CONV_2D (block2b_project_conv) ====
-    Tensor* l13 = layer_conv2d(current,
-        "layer014_CONV_2D_1_block2b_project_conv_1_BiasAdd_1_block2b_project_conv_1_convo",
-        56, 56, 32, 1, 1, 1, 1, 13);
-    free_tensor(current);
-    current = l13;
+    // LAYER 14: ADD (skip connection from layer 10)
+    printf("Starting Layer 14 ADD...\n");
+    int8_t* layer_15_out = run_add_layer("extracted_params_hsigmoid/layer015_ADD_1_block2b_add_1_Add", "all_layer_io/layer_15_ADD",
+                                         layer_14_out, conv14_out_h * conv14_out_w * 32, layer_11_out, conv14_out_h * conv14_out_w * 32);
     
-    // ==== LAYER 14: ADD (skip from layer 10) ====
-    Tensor* l14 = layer_add(current, skip_l10,
-        "layer015_ADD_1_block2b_add_1_Add", 14);
-    free_tensor(current);
-    current = l14;
+    // LAYER 15: CONV_2D (block3a_expand_conv) [1,56,56,32] -> [1,28,28,128]
+    printf("Starting Layer 15 CONV_2D...\n");
+    int conv16_out_h, conv16_out_w;
+    int8_t* layer_16_out = run_conv2d_layer("extracted_params_hsigmoid/layer016_CONV_2D_1_block3a_expand_conv_1_BiasAdd_1_block3a_expand_conv_1_convolu", "all_layer_io/layer_16_CONV_2D",
+                                            layer_15_out, 56, 56, 32, 128, 3, 3, 2, 2, "SAME", &conv16_out_h, &conv16_out_w);
     
-    // ==== LAYER 15: CONV_2D (block3a_expand_conv) ====
-    Tensor* l15 = layer_conv2d(current,
-        "layer016_CONV_2D_1_block3a_expand_conv_1_BiasAdd_1_block3a_expand_conv_1_convolu",
-        28, 28, 128, 3, 3, 2, 2, 15);
-    free_tensor(current);
-    current = l15;
+    // LAYER 16: HARD_SWISH
+    printf("Starting Layer 16 HARD_SWISH...\n");
+    int layer_17_size = conv16_out_h * conv16_out_w * 128;
+    int8_t* layer_17_out = run_hardswish_layer("extracted_params_hsigmoid/layer017_HARD_SWISH_1_block3a_expand_activation_1_truediv__1_block3a_expand_acti", "all_layer_io/layer_17_HARD_SWISH",
+                                              layer_16_out, &layer_17_size);
     
-    // ==== LAYER 16: HARD_SWISH ====
-    Tensor* l16 = layer_hardswish(current,
-        "layer017_HARD_SWISH_1_block3a_expand_activation_1_truediv__1_block3a_expand_acti", 16);
-    free_tensor(current);
-    current = l16;
+    // LAYER 17: CONV_2D (block3a_project_conv) [1,28,28,128] -> [1,28,28,48]
+    printf("Starting Layer 17 CONV_2D...\n");
+    int conv18_out_h, conv18_out_w;
+    int8_t* layer_18_out = run_conv2d_layer("extracted_params_hsigmoid/layer018_CONV_2D_1_block3a_project_conv_1_BiasAdd_1_block3a_project_conv_1_convo", "all_layer_io/layer_18_CONV_2D",
+                                            layer_17_out, 28, 28, 128, 48, 1, 1, 1, 1, "SAME", &conv18_out_h, &conv18_out_w);
     
-    // ==== LAYER 17: CONV_2D (block3a_project_conv) ====
-    Tensor* l17 = layer_conv2d(current,
-        "layer018_CONV_2D_1_block3a_project_conv_1_BiasAdd_1_block3a_project_conv_1_convo",
-        28, 28, 48, 1, 1, 1, 1, 17);
-    free_tensor(current);
-    current = l17;
-    skip_l17 = current;  // Save for skip at layer 21
+    // LAYER 18: CONV_2D (block3b_expand_conv) [1,28,28,48] -> [1,28,28,192]
+    printf("Starting Layer 18 CONV_2D...\n");
+    int conv19_out_h, conv19_out_w;
+    int8_t* layer_19_out = run_conv2d_layer("extracted_params_hsigmoid/layer019_CONV_2D_1_block3b_expand_conv_1_BiasAdd_1_block3b_expand_conv_1_convolu", "all_layer_io/layer_19_CONV_2D",
+                                            layer_18_out, 28, 28, 48, 192, 3, 3, 1, 1, "SAME", &conv19_out_h, &conv19_out_w);
     
-    // ==== LAYER 18: CONV_2D (block3b_expand_conv) ====
-    Tensor* l18 = layer_conv2d(current,
-        "layer019_CONV_2D_1_block3b_expand_conv_1_BiasAdd_1_block3b_expand_conv_1_convolu",
-        28, 28, 192, 3, 3, 1, 1, 18);
-    free_tensor(current);
-    current = l18;
+    // LAYER 19: HARD_SWISH
+    printf("Starting Layer 19 HARD_SWISH...\n");
+    int layer_20_size = conv19_out_h * conv19_out_w * 192;
+    int8_t* layer_20_out = run_hardswish_layer("extracted_params_hsigmoid/layer020_HARD_SWISH_1_block3b_expand_activation_1_truediv__1_block3b_expand_acti", "all_layer_io/layer_20_HARD_SWISH",
+                                              layer_19_out, &layer_20_size);
     
-    // ==== LAYER 19: HARD_SWISH ====
-    Tensor* l19 = layer_hardswish(current,
-        "layer020_HARD_SWISH_1_block3b_expand_activation_1_truediv__1_block3b_expand_acti", 19);
-    free_tensor(current);
-    current = l19;
+    // LAYER 20: CONV_2D (block3b_project_conv) [1,28,28,192] -> [1,28,28,48]
+    printf("Starting Layer 20 CONV_2D...\n");
+    int conv21_out_h, conv21_out_w;
+    int8_t* layer_21_out = run_conv2d_layer("extracted_params_hsigmoid/layer021_CONV_2D_1_block3b_project_conv_1_BiasAdd_1_block3b_project_conv_1_convo", "all_layer_io/layer_21_CONV_2D",
+                                            layer_20_out, 28, 28, 192, 48, 1, 1, 1, 1, "SAME", &conv21_out_h, &conv21_out_w);
     
-    // ==== LAYER 20: CONV_2D (block3b_project_conv) ====
-    Tensor* l20 = layer_conv2d(current,
-        "layer021_CONV_2D_1_block3b_project_conv_1_BiasAdd_1_block3b_project_conv_1_convo",
-        28, 28, 48, 1, 1, 1, 1, 20);
-    free_tensor(current);
-    current = l20;
+    // LAYER 21: ADD (skip connection from layer 17)
+    printf("Starting Layer 21 ADD...\n");
+    int8_t* layer_22_out = run_add_layer("extracted_params_hsigmoid/layer022_ADD_1_block3b_add_1_Add", "all_layer_io/layer_22_ADD",
+                                         layer_21_out, conv21_out_h * conv21_out_w * 48, layer_18_out, conv21_out_h * conv21_out_w * 48);
     
-    // ==== LAYER 21: ADD (skip from layer 17) ====
-    Tensor* l21 = layer_add(current, skip_l17,
-        "layer022_ADD_1_block3b_add_1_Add", 21);
-    free_tensor(current);
-    current = l21;
-    
-    printf("\n>>> BLOCKS 4a-5b (Layers 22-94) <<<\n");
-    fflush(stdout);
+    printf("\n>>> BLOCKS 4a-5a (Layers 22-94) <<<\n\n");
     
     // ===== LAYER 22-35: BLOCK 4a with SE =====
-    printf("\n[*] Block 4a (Layers 22-35 with SE)...\n");
-    fflush(stdout);
+    printf("[*] Block 4a (Layers 22-35 with SE)...\n");
     
-    // Layer 22: CONV_2D - block4a expand
-    Tensor* l22 = layer_conv2d(current, "layer023_CONV_2D_1_block4a_expand_conv_1_BiasAdd_1_block4a_expand_conv_1_convolu",
-                          28, 28, 192, 1, 1, 1, 1, 22);
-    free_tensor(current); current = l22;
+    // LAYER 22: CONV_2D (block4a_expand_conv) [1,28,28,48] -> [1,28,28,192]
+    printf("Starting Layer 22 CONV_2D...\n");
+    int conv23_out_h, conv23_out_w;
+    int8_t* layer_23_out = run_conv2d_layer("extracted_params_hsigmoid/layer023_CONV_2D_1_block4a_expand_conv_1_BiasAdd_1_block4a_expand_conv_1_convolu", "all_layer_io/layer_23_CONV_2D",
+                                            layer_22_out, 28, 28, 48, 192, 3, 3, 1, 1, "SAME", &conv23_out_h, &conv23_out_w);
     
-    // Layer 23: HARD_SWISH
-    Tensor* l23 = layer_hardswish(current, "layer024_HARD_SWISH_1_block4a_expand_activation_1_truediv__1_block4a_expand_acti", 23);
-    free_tensor(current); current = l23;
+    // LAYER 23: HARD_SWISH
+    printf("Starting Layer 23 HARD_SWISH...\n");
+    int layer_24_size = conv23_out_h * conv23_out_w * 192;
+    int8_t* layer_24_out = run_hardswish_layer("extracted_params_hsigmoid/layer024_HARD_SWISH_1_block4a_expand_activation_1_truediv__1_block4a_expand_acti", "all_layer_io/layer_24_HARD_SWISH",
+                                              layer_23_out, &layer_24_size);
     
-    // Layer 24: DEPTHWISE_CONV_2D - stride 2
-    Tensor* l24 = layer_depthwise_conv2d(current, "layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depth",
-                                     14, 14, 192, 3, 3, 2, 2, 24);
-    free_tensor(current); current = l24;
+    // LAYER 24: DEPTHWISE_CONV_2D (block4a_dwconv2) [1,28,28,192] -> [1,14,14,192]
+    printf("Starting Layer 24 DEPTHWISE_CONV_2D...\n");
+    int conv25_out_h, conv25_out_w;
+    int8_t* layer_25_out = run_dw_conv_layer("extracted_params_hsigmoid/layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depth",
+                                             layer_24_out, 28, 28, 192, 192, 3, 3, 2, 2, "SAME", &conv25_out_h, &conv25_out_w);
     
-    // Layer 25: HARD_SWISH
-    Tensor* l25 = layer_hardswish(current, "layer026_HARD_SWISH_1_block4a_activation_1_truediv__1_block4a_activation_1_Relu6", 25);
-    free_tensor(current); current = l25;
+    // LAYER 25: HARD_SWISH
+    printf("Starting Layer 25 HARD_SWISH...\n");
+    int layer_26_size = conv25_out_h * conv25_out_w * 192;
+    int8_t* layer_26_out = run_hardswish_layer("extracted_params_hsigmoid/layer026_HARD_SWISH_1_block4a_activation_1_truediv__1_block4a_activation_1_Relu6", "all_layer_io/layer_26_HARD_SWISH",
+                                              layer_25_out, &layer_26_size);
     
-    // Layer 26: MEAN - SE squeeze [1,14,14,192] -> [1,1,192,1]
-    Tensor* l26 = layer_mean(current, "layer027_MEAN_1_block4a_se_squeeze_1_Mean", 26);
+    // LAYER 26: MEAN (SE squeeze) [1,14,14,192] -> [1,1,192]
+    printf("Starting Layer 26 MEAN...\n");
+    int8_t* layer_27_out = run_mean_layer("extracted_params_hsigmoid/layer027_MEAN_1_block4a_se_squeeze_1_Mean", "all_layer_io/layer_27_MEAN",
+                                          layer_26_out, 14, 14, 192, 1, 0);
     
-    // Layers 27-30: SHAPE, STRIDED_SLICE, PACK, RESHAPE to [1,1,1,192]
-    Tensor* se_reshaped = layer_skip_shape(l26, 1, 1, 192, 27, "layer027-030_SHAPE");
-    free_tensor(l26);
+    printf("Skip layer 27-30 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // Layer 31: CONV_2D - SE reduce [1,1,1,192] -> [1,1,1,12]
-    Tensor* l31 = layer_conv2d(se_reshaped, "layer032_CONV_2D_1_block4a_se_reduce_1_BiasAdd_1_block4a_se_reduce_1_convolution",
-                                     1, 1, 12, 1, 1, 1, 1, 31);
-    free_tensor(se_reshaped);
+    // LAYER 31: CONV_2D (SE reduce) [1,1,192] -> [1,1,12]
+    printf("Starting Layer 31 CONV_2D...\n");
+    int conv32_out_h, conv32_out_w;
+    int8_t* layer_32_out = run_conv2d_layer("extracted_params_hsigmoid/layer032_CONV_2D_1_block4a_se_reduce_1_BiasAdd_1_block4a_se_reduce_1_convolution", "all_layer_io/layer_32_CONV_2D",
+                                            layer_27_out, 1, 1, 192, 12, 1, 1, 1, 1, "SAME", &conv32_out_h, &conv32_out_w);
     
-    // Layer 32: HARD_SWISH - SE reduce activation
-    Tensor* l32 = layer_hardswish(l31, "layer033_HARD_SWISH_1_block4a_se_reduce_1_truediv__1_block4a_se_reduce_1_Relu6_1", 32);
-    free_tensor(l31);
+    // LAYER 32: HARD_SWISH (SE reduce activation)
+    printf("Starting Layer 32 HARD_SWISH...\n");
+    int layer_33_size = conv32_out_h * conv32_out_w * 12;
+    int8_t* layer_33_out = run_hardswish_layer("extracted_params_hsigmoid/layer033_HARD_SWISH_1_block4a_se_reduce_1_truediv__1_block4a_se_reduce_1_Relu6_1", "all_layer_io/layer_33_HARD_SWISH",
+                                              layer_32_out, &layer_33_size);
     
-    // Layer 33: CONV_2D - SE expand [1,1,1,12] -> [1,1,1,192]
-    Tensor* l33 = layer_conv2d(l32, "layer034_CONV_2D_1_block4a_se_expand_1_Relu6_1_block4a_se_expand_1_add_1_block4a",
-                                     1, 1, 192, 1, 1, 1, 1, 33);
-    free_tensor(l32);
+    // LAYER 33: CONV_2D (SE expand) [1,1,12] -> [1,1,192]
+    printf("Starting Layer 33 CONV_2D...\n");
+    int conv34_out_h, conv34_out_w;
+    int8_t* layer_34_out = run_conv2d_layer("extracted_params_hsigmoid/layer034_CONV_2D_1_block4a_se_expand_1_Relu6_1_block4a_se_expand_1_add_1_block4a", "all_layer_io/layer_34_CONV_2D",
+                                            layer_33_out, 1, 1, 12, 192, 1, 1, 1, 1, "SAME", &conv34_out_h, &conv34_out_w);
     
-    // Layer 34: MUL - SE output scaling (scalar multiply)
-    Tensor* l34 = layer_mul(l33, l33, "layer035_MUL_1_block4a_se_expand_1_truediv", 34);
-    free_tensor(l33);
+    // LAYER 34: MUL (SE output scaling)
+    printf("Starting Layer 34 MUL...\n");
+    int8_t* layer_35_out = run_mul_layer("extracted_params_hsigmoid/layer035_MUL_1_block4a_se_expand_1_truediv", "all_layer_io/layer_34_MUL",
+                                        layer_34_out, 192, NULL, 1, 0);
     
-    // Layer 35: MUL - SE excitation (broadcast [1,1,1,192] to [1,14,14,192])
-    Tensor* l35 = layer_mul(current, l34, "layer036_MUL_1_block4a_se_excite_1_Mul", 35);
-    free_tensor(current); free_tensor(l34);
-    current = l35;
+    // LAYER 35: MUL (SE excitation - broadcast)
+    printf("Starting Layer 35 MUL...\n");
+    int8_t* layer_36_out = run_mul_layer("extracted_params_hsigmoid/layer036_MUL_1_block4a_se_excite_1_Mul", "all_layer_io/layer_35_MUL",
+                                        NULL, 14*14*192, layer_35_out, 192, 1);
     
-    // Layer 36: CONV_2D - block4a project [1,14,14,192] -> [1,14,14,96]
-    Tensor* l36 = layer_conv2d(current, "layer037_CONV_2D_1_block4a_project_conv_1_BiasAdd_1_block4a_project_conv_1_convo",
-                          14, 14, 96, 1, 1, 1, 1, 36);
-    free_tensor(current);
-    current = l36;
-    skip_l36 = current;  // Save for skip at layer 52
+    // LAYER 36: CONV_2D (block4a project) [1,14,14,192] -> [1,14,14,96]
+    printf("Starting Layer 36 CONV_2D...\n");
+    int conv37_out_h, conv37_out_w;
+    int8_t* layer_37_out = run_conv2d_layer("extracted_params_hsigmoid/layer037_CONV_2D_1_block4a_project_conv_1_BiasAdd_1_block4a_project_conv_1_convo", "all_layer_io/layer_36_CONV_2D",
+                                            layer_36_out, 14, 14, 192, 96, 1, 1, 1, 1, "SAME", &conv37_out_h, &conv37_out_w);
     
     // ===== LAYER 37-52: BLOCK 4b with SE and skip =====
     printf("[*] Block 4b (Layers 37-52 with SE)...\n");
     
-    // Layer 37: CONV_2D
-    Tensor* l37 = layer_conv2d(current, "layer038_CONV_2D_1_block4b_expand_conv_1_BiasAdd_1_block4b_expand_conv_1_convolu",
-                          14, 14, 384, 1, 1, 1, 1, 37);
-    free_tensor(current); current = l37;
+    // LAYER 37: CONV_2D (block4b_expand_conv) [1,14,14,96] -> [1,14,14,384]
+    printf("Starting Layer 37 CONV_2D...\n");
+    int conv38_out_h, conv38_out_w;
+    int8_t* layer_38_out = run_conv2d_layer("extracted_params_hsigmoid/layer038_CONV_2D_1_block4b_expand_conv_1_BiasAdd_1_block4b_expand_conv_1_convolu", "all_layer_io/layer_38_CONV_2D",
+                                            layer_37_out, 14, 14, 96, 384, 1, 1, 1, 1, "SAME", &conv38_out_h, &conv38_out_w);
     
-    // Layer 38: HARD_SWISH
-    l37 = layer_hardswish(current, "layer039_HARD_SWISH_1_block4b_expand_activation_1_truediv__1_block4b_expand_acti", 38);
-    free_tensor(current); current = l37;
+    // LAYER 38: HARD_SWISH
+    printf("Starting Layer 38 HARD_SWISH...\n");
+    int layer_39_size = conv38_out_h * conv38_out_w * 384;
+    int8_t* layer_39_out = run_hardswish_layer("extracted_params_hsigmoid/layer039_HARD_SWISH_1_block4b_expand_activation_1_truediv__1_block4b_expand_acti", "all_layer_io/layer_39_HARD_SWISH",
+                                              layer_38_out, &layer_39_size);
     
-    // Layer 39: DEPTHWISE_CONV_2D
-    Tensor* l39 = layer_depthwise_conv2d(current, "layer040_DEPTHWISE_CONV_2D_1_block4b_dwconv2_1_BiasAdd_1_block4b_dwconv2_1_depth",
-                                     14, 14, 384, 3, 3, 1, 1, 39);
-    free_tensor(current); current = l39;
+    // LAYER 39: DEPTHWISE_CONV_2D (block4b_dwconv2) [1,14,14,384] -> [1,14,14,384]
+    printf("Starting Layer 39 DEPTHWISE_CONV_2D...\n");
+    int conv40_out_h, conv40_out_w;
+    int8_t* layer_40_out = run_dw_conv_layer("extracted_params_hsigmoid/layer040_DEPTHWISE_CONV_2D_1_block4b_dwconv2_1_BiasAdd_1_block4b_dwconv2_1_depth",
+                                             layer_39_out, 14, 14, 384, 384, 3, 3, 1, 1, "SAME", &conv40_out_h, &conv40_out_w);
     
-    // Layer 40: HARD_SWISH
-    l39 = layer_hardswish(current, "layer041_HARD_SWISH_1_block4b_activation_1_truediv__1_block4b_activation_1_Relu6_1", 40);
-    free_tensor(current); current = l39;
+    // LAYER 40: HARD_SWISH
+    printf("Starting Layer 40 HARD_SWISH...\n");
+    int layer_41_size = conv40_out_h * conv40_out_w * 384;
+    int8_t* layer_41_out = run_hardswish_layer("extracted_params_hsigmoid/layer041_HARD_SWISH_1_block4b_activation_1_truediv__1_block4b_activation_1_Relu6", "all_layer_io/layer_41_HARD_SWISH",
+                                              layer_40_out, &layer_41_size);
     
-    // Layer 41: MEAN (SE)
-    Tensor* l41 = layer_mean(current, "layer042_MEAN_1_block4b_se_squeeze_1_Mean", 41);
-    se_reshaped = layer_skip_shape(l41, 1, 1, 384, 42, "layer042-045_SHAPE");
-    free_tensor(l41);
+    // LAYER 41: MEAN (SE squeeze) [1,14,14,384] -> [1,1,384]
+    printf("Starting Layer 41 MEAN...\n");
+    int8_t* layer_42_out = run_mean_layer("extracted_params_hsigmoid/layer042_MEAN_1_block4b_se_squeeze_1_Mean", "all_layer_io/layer_42_MEAN",
+                                          layer_41_out, 14, 14, 384, 1, 0);
     
-    // Layer 46: CONV_2D - SE reduce
-    Tensor* l46 = layer_conv2d(se_reshaped, "layer047_CONV_2D_1_block4b_se_reduce_1_BiasAdd_1_block4b_se_reduce_1_convolution",
-                            1, 1, 24, 1, 1, 1, 1, 46);
-    free_tensor(se_reshaped);
-    l46 = layer_hardswish(l46, "layer048_HARD_SWISH_1_block4b_se_reduce_1_truediv__1_block4b_se_reduce_1_Relu6_1", 47);
+    printf("Skip layer 42-45 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // Layer 48: CONV_2D - SE expand
-    Tensor* l48 = layer_conv2d(l46, "layer049_CONV_2D_1_block4b_se_expand_1_Relu6_1_block4b_se_expand_1_add_1_block4b",
-                            1, 1, 384, 1, 1, 1, 1, 48);
-    free_tensor(l46);
-    l48 = layer_mul(l48, l48, "layer050_MUL_1_block4b_se_expand_1_truediv", 49);
+    // LAYER 46: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    printf("Starting Layer 46 CONV_2D...\n");
+    int conv47_out_h, conv47_out_w;
+    int8_t* layer_47_out = run_conv2d_layer("extracted_params_hsigmoid/layer047_CONV_2D_1_block4b_se_reduce_1_BiasAdd_1_block4b_se_reduce_1_convolution", "all_layer_io/layer_47_CONV_2D",
+                                            layer_42_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv47_out_h, &conv47_out_w);
     
-    // Layer 50: MUL - SE excitation
-    Tensor* l50 = layer_mul(current, l48, "layer051_MUL_1_block4b_se_excite_1_Mul", 50);
-    free_tensor(current); free_tensor(l48);
-    current = l50;
+    // LAYER 47: HARD_SWISH (SE reduce activation)
+    printf("Starting Layer 47 HARD_SWISH...\n");
+    int layer_48_size = conv47_out_h * conv47_out_w * 16;
+    int8_t* layer_48_out = run_hardswish_layer("extracted_params_hsigmoid/layer048_HARD_SWISH_1_block4b_se_reduce_1_truediv__1_block4b_se_reduce_1_Relu6_1", "all_layer_io/layer_48_HARD_SWISH",
+                                              layer_47_out, &layer_48_size);
     
-    // Layer 51: CONV_2D - project
-    l50 = layer_conv2d(current, "layer052_CONV_2D_1_block4b_project_conv_1_BiasAdd_1_block4b_project_conv_1_convo",
-                          14, 14, 96, 1, 1, 1, 1, 51);
-    free_tensor(current); current = l50;
+    // LAYER 48: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    printf("Starting Layer 48 CONV_2D...\n");
+    int conv49_out_h, conv49_out_w;
+    int8_t* layer_49_out = run_conv2d_layer("extracted_params_hsigmoid/layer049_CONV_2D_1_block4b_se_expand_1_Relu6_1_block4b_se_expand_1_add_1_block4b", "all_layer_io/layer_49_CONV_2D",
+                                            layer_48_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv49_out_h, &conv49_out_w);
     
-    // Layer 52: ADD - skip connection
-    l50 = layer_add(current, skip_l36, "layer053_ADD_1_block4b_add_1_Add", 52);
-    free_tensor(current);  // Only free current, not skip_l36 (same memory)
-    current = l50;
+    // LAYER 49: MUL (SE output scaling)
+    printf("Starting Layer 49 MUL...\n");
+    int8_t* layer_50_out = run_mul_layer("extracted_params_hsigmoid/layer050_MUL_1_block4b_se_expand_1_truediv", "all_layer_io/layer_50_MUL",
+                                        layer_49_out, 384, NULL, 1, 0);
     
-    // ===== LAYER 53-68: BLOCK 4c and 5a =====
-    printf("[*] Block 4c and 5a (Layers 53-68)...\n");
+    // LAYER 50: MUL (SE excitation - broadcast)
+    printf("Starting Layer 50 MUL...\n");
+    int8_t* layer_51_out = run_mul_layer("extracted_params_hsigmoid/layer051_MUL_1_block4b_se_excite_1_Mul", "all_layer_io/layer_51_MUL",
+                                        NULL, 14*14*384, layer_50_out, 384, 1);
     
-    // Layer 53-56: Block 4c (similar pattern)
-    Tensor* l53 = layer_conv2d(current, "layer054_CONV_2D_1_block4c_expand_conv_1_BiasAdd_1_block4c_expand_conv_1_convolu",
-                          14, 14, 384, 1, 1, 1, 1, 53);
-    free_tensor(current);
-    l53 = layer_hardswish(l53, "layer055_HARD_SWISH_1_block4c_expand_activation_1_truediv__1_block4c_expand_acti", 54);
-    l53 = layer_depthwise_conv2d(l53, "layer056_DEPTHWISE_CONV_2D_1_block4c_dwconv2_1_BiasAdd_1_block4c_dwconv2_1_depth",
-                                     14, 14, 384, 3, 3, 1, 1, 55);
-    l53 = layer_hardswish(l53, "layer057_HARD_SWISH_1_block4c_activation_1_truediv__1_block4c_activation_1_Relu6_1", 56);
+    // LAYER 51: CONV_2D (block4b project) [1,14,14,384] -> [1,14,14,96]
+    printf("Starting Layer 51 CONV_2D...\n");
+    int conv52_out_h, conv52_out_w;
+    int8_t* layer_52_out = run_conv2d_layer("extracted_params_hsigmoid/layer052_CONV_2D_1_block4b_project_conv_1_BiasAdd_1_block4b_project_conv_1_convo", "all_layer_io/layer_52_CONV_2D",
+                                            layer_51_out, 14, 14, 384, 96, 1, 1, 1, 1, "SAME", &conv52_out_h, &conv52_out_w);
     
-    // SE for block 4c
-    Tensor* se_l = layer_mean(l53, "layer058_MEAN_1_block4c_se_squeeze_1_Mean", 57);
-    se_reshaped = layer_skip_shape(se_l, 1, 1, 384, 58, "layer058-061_SHAPE");
-    free_tensor(se_l);
-    se_l = layer_conv2d(se_reshaped, "layer062_CONV_2D_1_block4c_se_reduce_1_BiasAdd_1_block4c_se_reduce_1_convolution",
-                            1, 1, 24, 1, 1, 1, 1, 61);
-    free_tensor(se_reshaped);
-    se_l = layer_hardswish(se_l, "layer063_HARD_SWISH_1_block4c_se_reduce_1_truediv__1_block4c_se_reduce_1_Relu6_1", 62);
-    se_l = layer_conv2d(se_l, "layer064_CONV_2D_1_block4c_se_expand_1_Relu6_1_block4c_se_expand_1_add_1_block4c",
-                            1, 1, 384, 1, 1, 1, 1, 63);
-    se_l = layer_mul(se_l, se_l, "layer065_MUL_1_block4c_se_expand_1_truediv", 64);
-    l53 = layer_mul(l53, se_l, "layer066_MUL_1_block4c_se_excite_1_Mul", 65);
-    free_tensor(se_l);
+    // LAYER 52: ADD (skip connection from layer 36)
+    printf("Starting Layer 52 ADD...\n");
+    int8_t* layer_53_out = run_add_layer("extracted_params_hsigmoid/layer053_ADD_1_block4b_add_1_Add", "all_layer_io/layer_53_ADD",
+                                         layer_52_out, conv52_out_h * conv52_out_w * 96, layer_37_out, conv52_out_h * conv52_out_w * 96);
     
-    l53 = layer_conv2d(l53, "layer067_CONV_2D_1_block4c_project_conv_1_BiasAdd_1_block4c_project_conv_1_convo",
-                          14, 14, 96, 1, 1, 1, 1, 66);
+    // ===== LAYER 53-68: BLOCK 4c with SE and skip =====
+    printf("[*] Block 4c (Layers 53-68 with SE)...\n");
     
-    // Layer 67-68: Block 5a start
-    l53 = layer_conv2d(l53, "layer068_CONV_2D_1_block5a_expand_conv_1_BiasAdd_1_block5a_expand_conv_1_convolu",
-                          14, 14, 480, 1, 1, 1, 1, 67);
-    l53 = layer_hardswish(l53, "layer069_HARD_SWISH_1_block5a_expand_activation_1_truediv__1_block5a_expand_acti", 68);
+    // LAYER 53: CONV_2D (block4c_expand_conv) [1,14,14,96] -> [1,14,14,384]
+    printf("Starting Layer 53 CONV_2D...\n");
+    int conv54_out_h, conv54_out_w;
+    int8_t* layer_54_out = run_conv2d_layer("extracted_params_hsigmoid/layer054_CONV_2D_1_block4c_expand_conv_1_BiasAdd_1_block4c_expand_conv_1_convolu", "all_layer_io/layer_54_CONV_2D",
+                                            layer_53_out, 14, 14, 96, 384, 1, 1, 1, 1, "SAME", &conv54_out_h, &conv54_out_w);
     
-    current = l53;
+    // LAYER 54: HARD_SWISH
+    printf("Starting Layer 54 HARD_SWISH...\n");
+    int layer_55_size = conv54_out_h * conv54_out_w * 384;
+    int8_t* layer_55_out = run_hardswish_layer("extracted_params_hsigmoid/layer055_HARD_SWISH_1_block4c_expand_activation_1_truediv__1_block4c_expand_acti", "all_layer_io/layer_55_HARD_SWISH",
+                                              layer_54_out, &layer_55_size);
     
-    // ===== LAYER 69-95: BLOCK 5a-5b =====
-    printf("[*] Block 5a-5b (Layers 69-95)...\n");
+    // LAYER 55: DEPTHWISE_CONV_2D (block4c_dwconv2) [1,14,14,384] -> [1,14,14,384]
+    printf("Starting Layer 55 DEPTHWISE_CONV_2D...\n");
+    int conv56_out_h, conv56_out_w;
+    int8_t* layer_56_out = run_dw_conv_layer("extracted_params_hsigmoid/layer056_DEPTHWISE_CONV_2D_1_block4c_dwconv2_1_BiasAdd_1_block4c_dwconv2_1_depth",
+                                             layer_55_out, 14, 14, 384, 384, 3, 3, 1, 1, "SAME", &conv56_out_h, &conv56_out_w);
     
-    // Block 5a continuation
-    Tensor* l69 = layer_depthwise_conv2d(current, "layer070_DEPTHWISE_CONV_2D_1_block5a_dwconv2_1_BiasAdd_1_block5a_dwconv2_1_depth",
-                                     14, 14, 480, 3, 3, 1, 1, 69);
-    free_tensor(current);
-    l69 = layer_hardswish(l69, "layer071_HARD_SWISH_1_block5a_activation_1_truediv__1_block5a_activation_1_Relu6_1", 70);
+    // LAYER 56: HARD_SWISH
+    printf("Starting Layer 56 HARD_SWISH...\n");
+    int layer_57_size = conv56_out_h * conv56_out_w * 384;
+    int8_t* layer_57_out = run_hardswish_layer("extracted_params_hsigmoid/layer057_HARD_SWISH_1_block4c_activation_1_truediv__1_block4c_activation_1_Relu6", "all_layer_io/layer_57_HARD_SWISH",
+                                              layer_56_out, &layer_57_size);
     
-    // SE for 5a
-    se_l = layer_mean(l69, "layer072_MEAN_1_block5a_se_squeeze_1_Mean", 71);
-    se_reshaped = layer_skip_shape(se_l, 1, 1, 480, 72, "layer072-075_SHAPE");
-    free_tensor(se_l);
-    se_l = layer_conv2d(se_reshaped, "layer076_CONV_2D_1_block5a_se_reduce_1_BiasAdd_1_block5a_se_reduce_1_convolution",
-                            1, 1, 20, 1, 1, 1, 1, 75);
-    free_tensor(se_reshaped);
-    se_l = layer_hardswish(se_l, "layer077_HARD_SWISH_1_block5a_se_reduce_1_truediv__1_block5a_se_reduce_1_Relu6_1", 76);
-    se_l = layer_conv2d(se_l, "layer078_CONV_2D_1_block5a_se_expand_1_Relu6_1_block5a_se_expand_1_add_1_block5a",
-                            1, 1, 480, 1, 1, 1, 1, 77);
-    se_l = layer_mul(se_l, se_l, "layer079_MUL_1_block5a_se_expand_1_truediv", 78);
-    l69 = layer_mul(l69, se_l, "layer080_MUL_1_block5a_se_excite_1_Mul", 79);
-    free_tensor(se_l);
+    // LAYER 57: MEAN (SE squeeze) [1,14,14,384] -> [1,1,384]
+    printf("Starting Layer 57 MEAN...\n");
+    int8_t* layer_58_out = run_mean_layer("extracted_params_hsigmoid/layer058_MEAN_1_block4c_se_squeeze_1_Mean", "all_layer_io/layer_58_MEAN",
+                                          layer_57_out, 14, 14, 384, 1, 0);
     
-    l69 = layer_conv2d(l69, "layer081_CONV_2D_1_block5a_project_conv_1_BiasAdd_1_block5a_project_conv_1_convo",
-                          14, 14, 120, 1, 1, 1, 1, 80);
-    skip_l80 = l69;  // Save for skip at block 5b
+    printf("Skip layer 58-61 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // Block 5b
-    Tensor* l81 = layer_conv2d(l69, "layer082_CONV_2D_1_block5b_expand_conv_1_BiasAdd_1_block5b_expand_conv_1_convolu",
-                          14, 14, 480, 1, 1, 1, 1, 81);
-    // NOTE: Don't free l69 yet - skip_l80 needs it!
-    l81 = layer_hardswish(l81, "layer083_HARD_SWISH_1_block5b_expand_activation_1_truediv__1_block5b_expand_acti", 82);
-    l81 = layer_depthwise_conv2d(l81, "layer084_DEPTHWISE_CONV_2D_1_block5b_dwconv2_1_BiasAdd_1_block5b_dwconv2_1_depth",
-                                     14, 14, 480, 3, 3, 1, 1, 83);
-    l81 = layer_hardswish(l81, "layer085_HARD_SWISH_1_block5b_activation_1_truediv__1_block5b_activation_1_Relu6_1", 84);
+    // LAYER 62: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    printf("Starting Layer 62 CONV_2D...\n");
+    int conv63_out_h, conv63_out_w;
+    int8_t* layer_63_out = run_conv2d_layer("extracted_params_hsigmoid/layer063_CONV_2D_1_block4c_se_reduce_1_BiasAdd_1_block4c_se_reduce_1_convolution", "all_layer_io/layer_63_CONV_2D",
+                                            layer_58_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv63_out_h, &conv63_out_w);
     
-    // SE for 5b
-    se_l = layer_mean(l81, "layer086_MEAN_1_block5b_se_squeeze_1_Mean", 85);
-    se_reshaped = layer_skip_shape(se_l, 1, 1, 480, 86, "layer086-089_SHAPE");
-    free_tensor(se_l);
-    se_l = layer_conv2d(se_reshaped, "layer090_CONV_2D_1_block5b_se_reduce_1_BiasAdd_1_block5b_se_reduce_1_convolution",
-                            1, 1, 20, 1, 1, 1, 1, 89);
-    free_tensor(se_reshaped);
-    se_l = layer_hardswish(se_l, "layer091_HARD_SWISH_1_block5b_se_reduce_1_truediv__1_block5b_se_reduce_1_Relu6_1", 90);
-    se_l = layer_conv2d(se_l, "layer092_CONV_2D_1_block5b_se_expand_1_Relu6_1_block5b_se_expand_1_add_1_block5b",
-                            1, 1, 480, 1, 1, 1, 1, 91);
-    se_l = layer_mul(se_l, se_l, "layer093_MUL_1_block5b_se_expand_1_truediv", 92);
-    l81 = layer_mul(l81, se_l, "layer094_MUL_1_block5b_se_excite_1_Mul", 93);
-    free_tensor(se_l);
+    // LAYER 63: HARD_SWISH (SE reduce activation)
+    printf("Starting Layer 63 HARD_SWISH...\n");
+    int layer_64_size = conv63_out_h * conv63_out_w * 16;
+    int8_t* layer_64_out = run_hardswish_layer("extracted_params_hsigmoid/layer064_HARD_SWISH_1_block4c_se_reduce_1_truediv__1_block4c_se_reduce_1_Relu6_1", "all_layer_io/layer_64_HARD_SWISH",
+                                              layer_63_out, &layer_64_size);
     
-    l81 = layer_conv2d(l81, "layer095_CONV_2D_1_block5b_project_conv_1_BiasAdd_1_block5b_project_conv_1_convo",
-                          14, 14, 120, 1, 1, 1, 1, 94);
+    // LAYER 64: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    printf("Starting Layer 64 CONV_2D...\n");
+    int conv65_out_h, conv65_out_w;
+    int8_t* layer_65_out = run_conv2d_layer("extracted_params_hsigmoid/layer065_CONV_2D_1_block4c_se_expand_1_Relu6_1_block4c_se_expand_1_add_1_block4c", "all_layer_io/layer_65_CONV_2D",
+                                            layer_64_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv65_out_h, &conv65_out_w);
     
-    // ADD skip 5a->5b
-    l81 = layer_add(l81, skip_l80, "layer096_ADD_1_block5b_add_1_Add", 95);
-    // NOTE: skip_l80 is same as l69, will be freed below
-    free_tensor(l69);  // Free the skip tensor (same as skip_l80)
+    // LAYER 65: MUL (SE output scaling)
+    printf("Starting Layer 65 MUL...\n");
+    int8_t* layer_66_out = run_mul_layer("extracted_params_hsigmoid/layer066_MUL_1_block4c_se_expand_1_truediv", "all_layer_io/layer_66_MUL",
+                                        layer_65_out, 384, NULL, 1, 0);
     
-    printf("\n>>> Final Output <<<\n");
-    printf("Output shape: [%d, %d, %d, %d]\n", l81->batch, l81->height, l81->width, l81->channels);
-    printf("Output scale: %.8f, zp: %d\n", l81->scale, l81->zp);
+    // LAYER 66: MUL (SE excitation - broadcast)
+    printf("Starting Layer 66 MUL...\n");
+    int8_t* layer_67_out = run_mul_layer("extracted_params_hsigmoid/layer067_MUL_1_block4c_se_excite_1_Mul", "all_layer_io/layer_67_MUL",
+                                        NULL, 14*14*384, layer_66_out, 384, 1);
+    
+    // LAYER 67: CONV_2D (block4c project) [1,14,14,384] -> [1,14,14,96]
+    printf("Starting Layer 67 CONV_2D...\n");
+    int conv68_out_h, conv68_out_w;
+    int8_t* layer_68_out = run_conv2d_layer("extracted_params_hsigmoid/layer068_CONV_2D_1_block4c_project_conv_1_BiasAdd_1_block4c_project_conv_1_convo", "all_layer_io/layer_68_CONV_2D",
+                                            layer_67_out, 14, 14, 384, 96, 1, 1, 1, 1, "SAME", &conv68_out_h, &conv68_out_w);
+    
+    // LAYER 68: ADD (skip connection from layer 52)
+    printf("Starting Layer 68 ADD...\n");
+    int8_t* layer_69_out = run_add_layer("extracted_params_hsigmoid/layer069_ADD_1_block4c_add_1_Add", "all_layer_io/layer_69_ADD",
+                                         layer_68_out, conv68_out_h * conv68_out_w * 96, layer_53_out, conv68_out_h * conv68_out_w * 96);
+    
+    // ===== LAYER 69-84: BLOCK 5a with SE =====
+    printf("[*] Block 5a (Layers 69-84 with SE)...\n");
+    
+    // LAYER 69: CONV_2D (block5a_expand_conv) [1,14,14,96] -> [1,14,14,384]
+    printf("Starting Layer 69 CONV_2D...\n");
+    int conv70_out_h, conv70_out_w;
+    int8_t* layer_70_out = run_conv2d_layer("extracted_params_hsigmoid/layer070_CONV_2D_1_block5a_expand_conv_1_BiasAdd_1_block5a_expand_conv_1_convolu", "all_layer_io/layer_70_CONV_2D",
+                                            layer_69_out, 14, 14, 96, 384, 1, 1, 1, 1, "SAME", &conv70_out_h, &conv70_out_w);
+    
+    // LAYER 70: HARD_SWISH
+    printf("Starting Layer 70 HARD_SWISH...\n");
+    int layer_71_size = conv70_out_h * conv70_out_w * 384;
+    int8_t* layer_71_out = run_hardswish_layer("extracted_params_hsigmoid/layer071_HARD_SWISH_1_block5a_expand_activation_1_truediv__1_block5a_expand_acti", "all_layer_io/layer_71_HARD_SWISH",
+                                              layer_70_out, &layer_71_size);
+    
+    // LAYER 71: DEPTHWISE_CONV_2D (block5a_dwconv2) [1,14,14,384] -> [1,7,7,384]
+    printf("Starting Layer 71 DEPTHWISE_CONV_2D...\n");
+    int conv72_out_h, conv72_out_w;
+    int8_t* layer_72_out = run_dw_conv_layer("extracted_params_hsigmoid/layer072_DEPTHWISE_CONV_2D_1_block5a_dwconv2_1_BiasAdd_1_block5a_dwconv2_1_depth",
+                                             layer_71_out, 14, 14, 384, 384, 3, 3, 2, 2, "SAME", &conv72_out_h, &conv72_out_w);
+    
+    // LAYER 72: HARD_SWISH
+    printf("Starting Layer 72 HARD_SWISH...\n");
+    int layer_73_size = conv72_out_h * conv72_out_w * 384;
+    int8_t* layer_73_out = run_hardswish_layer("extracted_params_hsigmoid/layer073_HARD_SWISH_1_block5a_activation_1_truediv__1_block5a_activation_1_Relu6", "all_layer_io/layer_73_HARD_SWISH",
+                                              layer_72_out, &layer_73_size);
+    
+    // LAYER 73: MEAN (SE squeeze) [1,14,14,384] -> [1,1,384]
+    printf("Starting Layer 73 MEAN...\n");
+    int8_t* layer_74_out = run_mean_layer("extracted_params_hsigmoid/layer074_MEAN_1_block5a_se_squeeze_1_Mean", "all_layer_io/layer_74_MEAN",
+                                          layer_73_out, 14, 14, 384, 1, 0);
+    
+    printf("Skip layer 74-77 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
+    
+    // LAYER 78: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    printf("Starting Layer 78 CONV_2D...\n");
+    int conv79_out_h, conv79_out_w;
+    int8_t* layer_79_out = run_conv2d_layer("extracted_params_hsigmoid/layer079_CONV_2D_1_block5a_se_reduce_1_BiasAdd_1_block5a_se_reduce_1_convolution", "all_layer_io/layer_79_CONV_2D",
+                                            layer_74_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv79_out_h, &conv79_out_w);
+    
+    // LAYER 79: HARD_SWISH (SE reduce activation)
+    printf("Starting Layer 79 HARD_SWISH...\n");
+    int layer_80_size = conv79_out_h * conv79_out_w * 16;
+    int8_t* layer_80_out = run_hardswish_layer("extracted_params_hsigmoid/layer080_HARD_SWISH_1_block5a_se_reduce_1_truediv__1_block5a_se_reduce_1_Relu6_1", "all_layer_io/layer_80_HARD_SWISH",
+                                              layer_79_out, &layer_80_size);
+    
+    // LAYER 80: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    printf("Starting Layer 80 CONV_2D...\n");
+    int conv81_out_h, conv81_out_w;
+    int8_t* layer_81_out = run_conv2d_layer("extracted_params_hsigmoid/layer081_CONV_2D_1_block5a_se_expand_1_Relu6_1_block5a_se_expand_1_add_1_block5a", "all_layer_io/layer_81_CONV_2D",
+                                            layer_80_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv81_out_h, &conv81_out_w);
+    
+    // LAYER 81: MUL (SE output scaling)
+    printf("Starting Layer 81 MUL...\n");
+    int8_t* layer_82_out = run_mul_layer("extracted_params_hsigmoid/layer082_MUL_1_block5a_se_expand_1_truediv", "all_layer_io/layer_82_MUL",
+                                        layer_81_out, 384, NULL, 1, 0);
+    
+    // LAYER 82: MUL (SE excitation - broadcast)
+    printf("Starting Layer 82 MUL...\n");
+    int8_t* layer_83_out = run_mul_layer("extracted_params_hsigmoid/layer083_MUL_1_block5a_se_excite_1_Mul", "all_layer_io/layer_83_MUL",
+                                        NULL, 14*14*384, layer_82_out, 384, 1);
+    
+    // LAYER 83: CONV_2D (block5a project) [1,7,7,384] -> [1,7,7,112]
+    printf("Starting Layer 83 CONV_2D...\n");
+    int conv84_out_h, conv84_out_w;
+    int8_t* layer_84_out = run_conv2d_layer("extracted_params_hsigmoid/layer084_CONV_2D_1_block5a_project_conv_1_BiasAdd_1_block5a_project_conv_1_convo", "all_layer_io/layer_84_CONV_2D",
+                                            layer_83_out, 7, 7, 384, 112, 1, 1, 1, 1, "SAME", &conv84_out_h, &conv84_out_w);
+    
+    // ===== LAYER 85-94: BLOCK 5b with SE and skip =====
+    printf("[*] Block 5b (Layers 85-94 with SE)...\n");
+    
+    // LAYER 85: CONV_2D (block5b_expand_conv) [1,7,7,112] -> [1,7,7,672]
+    printf("Starting Layer 85 CONV_2D...\n");
+    int conv86_out_h, conv86_out_w;
+    int8_t* layer_86_out = run_conv2d_layer("extracted_params_hsigmoid/layer085_CONV_2D_1_block5b_expand_conv_1_BiasAdd_1_block5b_expand_conv_1_convolu", "all_layer_io/layer_85_CONV_2D",
+                                            layer_84_out, 7, 7, 112, 672, 1, 1, 1, 1, "SAME", &conv86_out_h, &conv86_out_w);
+    
+    // LAYER 86: HARD_SWISH
+    printf("Starting Layer 86 HARD_SWISH...\n");
+    int layer_87_size = conv86_out_h * conv86_out_w * 672;
+    int8_t* layer_87_out = run_hardswish_layer("extracted_params_hsigmoid/layer086_HARD_SWISH_1_block5b_expand_activation_1_truediv__1_block5b_expand_acti", "all_layer_io/layer_86_HARD_SWISH",
+                                              layer_86_out, &layer_87_size);
+    
+    // LAYER 87: DEPTHWISE_CONV_2D (block5b_dwconv2) [1,7,7,672] -> [1,7,7,672]
+    printf("Starting Layer 87 DEPTHWISE_CONV_2D...\n");
+    int conv88_out_h, conv88_out_w;
+    int8_t* layer_88_out = run_dw_conv_layer("extracted_params_hsigmoid/layer087_DEPTHWISE_CONV_2D_1_block5b_dwconv2_1_BiasAdd_1_block5b_dwconv2_1_depth",
+                                             layer_87_out, 7, 7, 672, 672, 3, 3, 1, 1, "SAME", &conv88_out_h, &conv88_out_w);
+    
+    // LAYER 88: HARD_SWISH
+    printf("Starting Layer 88 HARD_SWISH...\n");
+    int layer_89_size = conv88_out_h * conv88_out_w * 672;
+    int8_t* layer_89_out = run_hardswish_layer("extracted_params_hsigmoid/layer088_HARD_SWISH_1_block5b_activation_1_truediv__1_block5b_activation_1_Relu6", "all_layer_io/layer_88_HARD_SWISH",
+                                              layer_88_out, &layer_89_size);
+    
+    // LAYER 89: MEAN (SE squeeze) [1,7,7,672] -> [1,1,672]
+    printf("Starting Layer 89 MEAN...\n");
+    int8_t* layer_90_out = run_mean_layer("extracted_params_hsigmoid/layer089_MEAN_1_block5b_se_squeeze_1_Mean", "all_layer_io/layer_89_MEAN",
+                                          layer_89_out, 7, 7, 672, 1, 0);
+    
+    printf("Skip layer 90-93 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
+    
+    // LAYER 94: CONV_2D (SE reduce) [1,1,672] -> [1,1,28]
+    printf("Starting Layer 94 CONV_2D...\n");
+    int conv95_out_h, conv95_out_w;
+    int8_t* layer_94_se_reduce_out = run_conv2d_layer("extracted_params_hsigmoid/layer094_CONV_2D_1_block5b_se_reduce_1_BiasAdd_1_block5b_se_reduce_1_convolution", "all_layer_io/layer_94_CONV_2D",
+                                                      layer_90_out, 1, 1, 672, 28, 1, 1, 1, 1, "SAME", &conv95_out_h, &conv95_out_w);
+    
+    (void)layer_94_se_reduce_out;
+
+    printf("\n=== COMPLETED LAYERS 4-94 ===\n");
+    printf("Final output: Layer 94 SE reduce output ready for the next sequence step\n");
+    printf("Output shape: [%d, %d, %d, %d]\n", 1, conv95_out_h, conv95_out_w, 28);
     
     // Cleanup
-    free_tensor(l81);
+    // Note: In this pattern, memory management is handled internally by run_*_layer functions
     
-    printf("\n✓ Model inference completed (Layers 4-95)!\n");
     return 0;
 }
