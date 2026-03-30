@@ -131,7 +131,7 @@ int main() {
 
     // --- Đường dẫn file hay thay đổi theo layer ---
     // --- Thay đổi ở đây ---
-    const char* param_base_path = "extracted_params/layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depthwise_1_block4a_dwconv2_1_Squeeze";
+    const char* param_base_path = "extracted_params_hsigmoid/layer025_DEPTHWISE_CONV_2D_1_block4a_dwconv2_1_BiasAdd_1_block4a_dwconv2_1_depth";
     // Ở quyen's machine
     const char* io_base_path = "all_layer_io/layer_25_DEPTHWISE_CONV_2D";
     char ifm_file[512], weight_file[512], eff_bias_file[512], m_file[512], n_file[512];

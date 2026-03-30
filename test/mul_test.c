@@ -110,8 +110,8 @@ int main() {
     printf("Starting MUL Test ...\n");
 
     // Paths
-    char params_dir[] = "extracted_params/layer051_MUL_1_block4b_se_excite_1_Mul";
-    char input_dir[] = "all_layer_io/layer_51_MUL";
+    char params_dir[] = "extracted_params_hsigmoid/layer035_MUL_1_block4a_se_expand_1_truediv";
+    char input_dir[] = "all_layer_io/layer_35_MUL";
     char path_buf[512];
 
     // 1. Read Quantization Parameters
@@ -125,9 +125,9 @@ int main() {
     read_int_array(path_buf, &ifm0_zp, 1);
 
     // Input 1 (ifm_1)
-    sprintf(path_buf, "%s/ifm_1_scale.txt", params_dir);
+    sprintf(path_buf, "%s/weight_scale.txt", params_dir);
     read_double_array(path_buf, &ifm1_scale, 1);
-    sprintf(path_buf, "%s/ifm_1_zp.txt", params_dir);
+    sprintf(path_buf, "%s/weight_zp.txt", params_dir);
     read_int_array(path_buf, &ifm1_zp, 1);
 
     // Output

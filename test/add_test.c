@@ -160,7 +160,7 @@ int main() {
     Add(&params, &shape, input1_data, &shape, input2_data, &shape, output_data);
 
     // 5. Write Output
-    sprintf(path_buffer, "%sofm.txt", param_dir);
+    sprintf(path_buffer, "%sofm_c_sim.txt", param_dir);
     write_data(path_buffer, output_data, num_elements);
 
     free(input1_data);
