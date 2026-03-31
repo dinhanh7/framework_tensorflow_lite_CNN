@@ -38,6 +38,13 @@ static void helper_read_input_quant_params(const char* params_dir, float* ifm_sc
     read_int_array(path_buf, ifm_zp, 1);
 }
 
+static int helper_has_ifm0_quant_params(const char* params_dir) {
+    char path_buf[512];
+
+    sprintf(path_buf, "%s/ifm_scale.txt", params_dir);
+    return helper_file_exists(path_buf);
+}
+
 static int helper_has_ifm1_quant_params(const char* params_dir) {
     char path_buf[512];
 
@@ -207,6 +214,9 @@ int8_t* run_mul_layer(const char* params_dir, const char* input_dir, int8_t* inp
     } else {
         input0_data = (int8_t*)malloc(ifm0_size * sizeof(int8_t));
         sprintf(path_buf, "%s/ifm_0.txt", input_dir);
+        if (!helper_file_exists(path_buf)) {
+            sprintf(path_buf, "%s/param_idx0_values.txt", params_dir);
+        }
         read_int8_array(path_buf, input0_data, ifm0_size);
     }
 

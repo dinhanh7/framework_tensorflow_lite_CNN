@@ -147,7 +147,6 @@ int main() {
     int layer_20_size = conv19_out_h * conv19_out_w * 192;
     int8_t* layer_20_out = run_hardswish_layer("extracted_params_hsigmoid/layer020_HARD_SWISH_1_block3b_expand_activation_1_truediv__1_block3b_expand_acti", "all_layer_io/layer_20_HARD_SWISH",
                                               layer_19_out, &layer_20_size);
-    
     // LAYER 20: CONV_2D (block3b_project_conv) [1,28,28,192] -> [1,28,28,48]
     printf("Starting Layer 20 CONV_2D...\n");
     int conv21_out_h, conv21_out_w;
@@ -168,7 +167,7 @@ int main() {
     printf("Starting Layer 22 CONV_2D...\n");
     int conv23_out_h, conv23_out_w;
     int8_t* layer_23_out = run_conv2d_layer("extracted_params_hsigmoid/layer023_CONV_2D_1_block4a_expand_conv_1_BiasAdd_1_block4a_expand_conv_1_convolu", "all_layer_io/layer_23_CONV_2D",
-                                            layer_22_out, 28, 28, 48, 192, 3, 3, 1, 1, "SAME", &conv23_out_h, &conv23_out_w);
+                                            layer_22_out, 28, 28, 48, 192, 1, 1, 1, 1, "SAME", &conv23_out_h, &conv23_out_w);
     
     // LAYER 23: HARD_SWISH
     printf("Starting Layer 23 HARD_SWISH...\n");
@@ -187,12 +186,10 @@ int main() {
     int layer_26_size = conv25_out_h * conv25_out_w * 192;
     int8_t* layer_26_out = run_hardswish_layer("extracted_params_hsigmoid/layer026_HARD_SWISH_1_block4a_activation_1_truediv__1_block4a_activation_1_Relu6", "all_layer_io/layer_26_HARD_SWISH",
                                               layer_25_out, &layer_26_size);
-    
     // LAYER 26: MEAN (SE squeeze) [1,14,14,192] -> [1,1,192]
     printf("Starting Layer 26 MEAN...\n");
     int8_t* layer_27_out = run_mean_layer("extracted_params_hsigmoid/layer027_MEAN_1_block4a_se_squeeze_1_Mean", "all_layer_io/layer_27_MEAN",
                                           layer_26_out, 14, 14, 192, 1, 0);
-    
     printf("Skip layer 27-30 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
     // LAYER 31: CONV_2D (SE reduce) [1,1,192] -> [1,1,12]
@@ -206,7 +203,6 @@ int main() {
     int layer_33_size = conv32_out_h * conv32_out_w * 12;
     int8_t* layer_33_out = run_hardswish_layer("extracted_params_hsigmoid/layer033_HARD_SWISH_1_block4a_se_reduce_1_truediv__1_block4a_se_reduce_1_Relu6_1", "all_layer_io/layer_33_HARD_SWISH",
                                               layer_32_out, &layer_33_size);
-    
     // LAYER 33: CONV_2D (SE expand) [1,1,12] -> [1,1,192]
     printf("Starting Layer 33 CONV_2D...\n");
     int conv34_out_h, conv34_out_w;
@@ -215,20 +211,18 @@ int main() {
     
     // LAYER 34: MUL (SE output scaling)
     printf("Starting Layer 34 MUL...\n");
-    int8_t* layer_35_out = run_mul_layer("extracted_params_hsigmoid/layer035_MUL_1_block4a_se_expand_1_truediv", "all_layer_io/layer_34_MUL",
+    int8_t* layer_35_out = run_mul_layer("extracted_params_hsigmoid/layer035_MUL_1_block4a_se_expand_1_truediv", "all_layer_io/layer_35_MUL",
                                         layer_34_out, 192, NULL, 1, 0);
-    
     // LAYER 35: MUL (SE excitation - broadcast)
     printf("Starting Layer 35 MUL...\n");
-    int8_t* layer_36_out = run_mul_layer("extracted_params_hsigmoid/layer036_MUL_1_block4a_se_excite_1_Mul", "all_layer_io/layer_35_MUL",
+    int8_t* layer_36_out = run_mul_layer("extracted_params_hsigmoid/layer036_MUL_1_block4a_se_excite_1_Mul", "all_layer_io/layer_36_MUL",
                                         NULL, 14*14*192, layer_35_out, 192, 1);
-    
     // LAYER 36: CONV_2D (block4a project) [1,14,14,192] -> [1,14,14,96]
     printf("Starting Layer 36 CONV_2D...\n");
     int conv37_out_h, conv37_out_w;
-    int8_t* layer_37_out = run_conv2d_layer("extracted_params_hsigmoid/layer037_CONV_2D_1_block4a_project_conv_1_BiasAdd_1_block4a_project_conv_1_convo", "all_layer_io/layer_36_CONV_2D",
+    int8_t* layer_37_out = run_conv2d_layer("extracted_params_hsigmoid/layer037_CONV_2D_1_block4a_project_conv_1_BiasAdd_1_block4a_project_conv_1_convo", "all_layer_io/layer_37_CONV_2D",
                                             layer_36_out, 14, 14, 192, 96, 1, 1, 1, 1, "SAME", &conv37_out_h, &conv37_out_w);
-    
+   
     // ===== LAYER 37-52: BLOCK 4b with SE and skip =====
     printf("[*] Block 4b (Layers 37-52 with SE)...\n");
     
@@ -243,7 +237,6 @@ int main() {
     int layer_39_size = conv38_out_h * conv38_out_w * 384;
     int8_t* layer_39_out = run_hardswish_layer("extracted_params_hsigmoid/layer039_HARD_SWISH_1_block4b_expand_activation_1_truediv__1_block4b_expand_acti", "all_layer_io/layer_39_HARD_SWISH",
                                               layer_38_out, &layer_39_size);
-    
     // LAYER 39: DEPTHWISE_CONV_2D (block4b_dwconv2) [1,14,14,384] -> [1,14,14,384]
     printf("Starting Layer 39 DEPTHWISE_CONV_2D...\n");
     int conv40_out_h, conv40_out_w;
@@ -263,40 +256,41 @@ int main() {
     
     printf("Skip layer 42-45 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // LAYER 46: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    // LAYER 46: CONV_2D (SE reduce) [1,1,384] -> [1,1,24]
     printf("Starting Layer 46 CONV_2D...\n");
     int conv47_out_h, conv47_out_w;
     int8_t* layer_47_out = run_conv2d_layer("extracted_params_hsigmoid/layer047_CONV_2D_1_block4b_se_reduce_1_BiasAdd_1_block4b_se_reduce_1_convolution", "all_layer_io/layer_47_CONV_2D",
-                                            layer_42_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv47_out_h, &conv47_out_w);
+                                            layer_42_out, 1, 1, 384, 24, 1, 1, 1, 1, "SAME", &conv47_out_h, &conv47_out_w);
     
     // LAYER 47: HARD_SWISH (SE reduce activation)
     printf("Starting Layer 47 HARD_SWISH...\n");
-    int layer_48_size = conv47_out_h * conv47_out_w * 16;
+    int layer_48_size = conv47_out_h * conv47_out_w * 24;
     int8_t* layer_48_out = run_hardswish_layer("extracted_params_hsigmoid/layer048_HARD_SWISH_1_block4b_se_reduce_1_truediv__1_block4b_se_reduce_1_Relu6_1", "all_layer_io/layer_48_HARD_SWISH",
                                               layer_47_out, &layer_48_size);
     
-    // LAYER 48: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    // LAYER 48: CONV_2D (SE expand) [1,1,24] -> [1,1,384]
     printf("Starting Layer 48 CONV_2D...\n");
     int conv49_out_h, conv49_out_w;
     int8_t* layer_49_out = run_conv2d_layer("extracted_params_hsigmoid/layer049_CONV_2D_1_block4b_se_expand_1_Relu6_1_block4b_se_expand_1_add_1_block4b", "all_layer_io/layer_49_CONV_2D",
-                                            layer_48_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv49_out_h, &conv49_out_w);
+                                            layer_48_out, 1, 1, 24, 384, 1, 1, 1, 1, "SAME", &conv49_out_h, &conv49_out_w);
     
     // LAYER 49: MUL (SE output scaling)
     printf("Starting Layer 49 MUL...\n");
     int8_t* layer_50_out = run_mul_layer("extracted_params_hsigmoid/layer050_MUL_1_block4b_se_expand_1_truediv", "all_layer_io/layer_50_MUL",
                                         layer_49_out, 384, NULL, 1, 0);
-    
+    for(int i=0; i<30; i++) {
+        printf("%d ", layer_50_out[i]);
+    }
     // LAYER 50: MUL (SE excitation - broadcast)
     printf("Starting Layer 50 MUL...\n");
     int8_t* layer_51_out = run_mul_layer("extracted_params_hsigmoid/layer051_MUL_1_block4b_se_excite_1_Mul", "all_layer_io/layer_51_MUL",
                                         NULL, 14*14*384, layer_50_out, 384, 1);
-    
     // LAYER 51: CONV_2D (block4b project) [1,14,14,384] -> [1,14,14,96]
     printf("Starting Layer 51 CONV_2D...\n");
     int conv52_out_h, conv52_out_w;
     int8_t* layer_52_out = run_conv2d_layer("extracted_params_hsigmoid/layer052_CONV_2D_1_block4b_project_conv_1_BiasAdd_1_block4b_project_conv_1_convo", "all_layer_io/layer_52_CONV_2D",
                                             layer_51_out, 14, 14, 384, 96, 1, 1, 1, 1, "SAME", &conv52_out_h, &conv52_out_w);
-    
+   
     // LAYER 52: ADD (skip connection from layer 36)
     printf("Starting Layer 52 ADD...\n");
     int8_t* layer_53_out = run_add_layer("extracted_params_hsigmoid/layer053_ADD_1_block4b_add_1_Add", "all_layer_io/layer_53_ADD",
@@ -328,7 +322,6 @@ int main() {
     int layer_57_size = conv56_out_h * conv56_out_w * 384;
     int8_t* layer_57_out = run_hardswish_layer("extracted_params_hsigmoid/layer057_HARD_SWISH_1_block4c_activation_1_truediv__1_block4c_activation_1_Relu6", "all_layer_io/layer_57_HARD_SWISH",
                                               layer_56_out, &layer_57_size);
-    
     // LAYER 57: MEAN (SE squeeze) [1,14,14,384] -> [1,1,384]
     printf("Starting Layer 57 MEAN...\n");
     int8_t* layer_58_out = run_mean_layer("extracted_params_hsigmoid/layer058_MEAN_1_block4c_se_squeeze_1_Mean", "all_layer_io/layer_58_MEAN",
@@ -336,23 +329,23 @@ int main() {
     
     printf("Skip layer 58-61 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // LAYER 62: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    // LAYER 62: CONV_2D (SE reduce) [1,1,384] -> [1,1,24]
     printf("Starting Layer 62 CONV_2D...\n");
     int conv63_out_h, conv63_out_w;
     int8_t* layer_63_out = run_conv2d_layer("extracted_params_hsigmoid/layer063_CONV_2D_1_block4c_se_reduce_1_BiasAdd_1_block4c_se_reduce_1_convolution", "all_layer_io/layer_63_CONV_2D",
-                                            layer_58_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv63_out_h, &conv63_out_w);
+                                            layer_58_out, 1, 1, 384, 24, 1, 1, 1, 1, "SAME", &conv63_out_h, &conv63_out_w);
     
     // LAYER 63: HARD_SWISH (SE reduce activation)
     printf("Starting Layer 63 HARD_SWISH...\n");
-    int layer_64_size = conv63_out_h * conv63_out_w * 16;
+    int layer_64_size = conv63_out_h * conv63_out_w * 24;
     int8_t* layer_64_out = run_hardswish_layer("extracted_params_hsigmoid/layer064_HARD_SWISH_1_block4c_se_reduce_1_truediv__1_block4c_se_reduce_1_Relu6_1", "all_layer_io/layer_64_HARD_SWISH",
                                               layer_63_out, &layer_64_size);
     
-    // LAYER 64: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    // LAYER 64: CONV_2D (SE expand) [1,1,24] -> [1,1,384]
     printf("Starting Layer 64 CONV_2D...\n");
     int conv65_out_h, conv65_out_w;
     int8_t* layer_65_out = run_conv2d_layer("extracted_params_hsigmoid/layer065_CONV_2D_1_block4c_se_expand_1_Relu6_1_block4c_se_expand_1_add_1_block4c", "all_layer_io/layer_65_CONV_2D",
-                                            layer_64_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv65_out_h, &conv65_out_w);
+                                            layer_64_out, 1, 1, 24, 384, 1, 1, 1, 1, "SAME", &conv65_out_h, &conv65_out_w);
     
     // LAYER 65: MUL (SE output scaling)
     printf("Starting Layer 65 MUL...\n");
@@ -369,7 +362,7 @@ int main() {
     int conv68_out_h, conv68_out_w;
     int8_t* layer_68_out = run_conv2d_layer("extracted_params_hsigmoid/layer068_CONV_2D_1_block4c_project_conv_1_BiasAdd_1_block4c_project_conv_1_convo", "all_layer_io/layer_68_CONV_2D",
                                             layer_67_out, 14, 14, 384, 96, 1, 1, 1, 1, "SAME", &conv68_out_h, &conv68_out_w);
-    
+
     // LAYER 68: ADD (skip connection from layer 52)
     printf("Starting Layer 68 ADD...\n");
     int8_t* layer_69_out = run_add_layer("extracted_params_hsigmoid/layer069_ADD_1_block4c_add_1_Add", "all_layer_io/layer_69_ADD",
@@ -378,79 +371,79 @@ int main() {
     // ===== LAYER 69-84: BLOCK 5a with SE =====
     printf("[*] Block 5a (Layers 69-84 with SE)...\n");
     
-    // LAYER 69: CONV_2D (block5a_expand_conv) [1,14,14,96] -> [1,14,14,384]
+    // LAYER 69: CONV_2D (block5a_expand_conv) [1,14,14,96] -> [1,14,14,576]
     printf("Starting Layer 69 CONV_2D...\n");
     int conv70_out_h, conv70_out_w;
     int8_t* layer_70_out = run_conv2d_layer("extracted_params_hsigmoid/layer070_CONV_2D_1_block5a_expand_conv_1_BiasAdd_1_block5a_expand_conv_1_convolu", "all_layer_io/layer_70_CONV_2D",
-                                            layer_69_out, 14, 14, 96, 384, 1, 1, 1, 1, "SAME", &conv70_out_h, &conv70_out_w);
+                                            layer_69_out, 14, 14, 96, 576, 1, 1, 1, 1, "SAME", &conv70_out_h, &conv70_out_w);
     
     // LAYER 70: HARD_SWISH
     printf("Starting Layer 70 HARD_SWISH...\n");
-    int layer_71_size = conv70_out_h * conv70_out_w * 384;
+    int layer_71_size = conv70_out_h * conv70_out_w * 576;
     int8_t* layer_71_out = run_hardswish_layer("extracted_params_hsigmoid/layer071_HARD_SWISH_1_block5a_expand_activation_1_truediv__1_block5a_expand_acti", "all_layer_io/layer_71_HARD_SWISH",
                                               layer_70_out, &layer_71_size);
     
-    // LAYER 71: DEPTHWISE_CONV_2D (block5a_dwconv2) [1,14,14,384] -> [1,7,7,384]
+    // LAYER 71: DEPTHWISE_CONV_2D (block5a_dwconv2) [1,14,14,576] -> [1,14,14,576]
     printf("Starting Layer 71 DEPTHWISE_CONV_2D...\n");
     int conv72_out_h, conv72_out_w;
     int8_t* layer_72_out = run_dw_conv_layer("extracted_params_hsigmoid/layer072_DEPTHWISE_CONV_2D_1_block5a_dwconv2_1_BiasAdd_1_block5a_dwconv2_1_depth",
-                                             layer_71_out, 14, 14, 384, 384, 3, 3, 2, 2, "SAME", &conv72_out_h, &conv72_out_w);
+                                             layer_71_out, 14, 14, 576, 576, 3, 3, 1, 1, "SAME", &conv72_out_h, &conv72_out_w);
     
     // LAYER 72: HARD_SWISH
     printf("Starting Layer 72 HARD_SWISH...\n");
-    int layer_73_size = conv72_out_h * conv72_out_w * 384;
+    int layer_73_size = conv72_out_h * conv72_out_w * 576;
     int8_t* layer_73_out = run_hardswish_layer("extracted_params_hsigmoid/layer073_HARD_SWISH_1_block5a_activation_1_truediv__1_block5a_activation_1_Relu6", "all_layer_io/layer_73_HARD_SWISH",
                                               layer_72_out, &layer_73_size);
     
-    // LAYER 73: MEAN (SE squeeze) [1,14,14,384] -> [1,1,384]
+    // LAYER 73: MEAN (SE squeeze) [1,14,14,576] -> [1,1,576]
     printf("Starting Layer 73 MEAN...\n");
     int8_t* layer_74_out = run_mean_layer("extracted_params_hsigmoid/layer074_MEAN_1_block5a_se_squeeze_1_Mean", "all_layer_io/layer_74_MEAN",
-                                          layer_73_out, 14, 14, 384, 1, 0);
+                                          layer_73_out, 14, 14, 576, 1, 0);
     
     printf("Skip layer 74-77 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
-    // LAYER 78: CONV_2D (SE reduce) [1,1,384] -> [1,1,16]
+    // LAYER 78: CONV_2D (SE reduce) [1,1,576] -> [1,1,24]
     printf("Starting Layer 78 CONV_2D...\n");
     int conv79_out_h, conv79_out_w;
     int8_t* layer_79_out = run_conv2d_layer("extracted_params_hsigmoid/layer079_CONV_2D_1_block5a_se_reduce_1_BiasAdd_1_block5a_se_reduce_1_convolution", "all_layer_io/layer_79_CONV_2D",
-                                            layer_74_out, 1, 1, 384, 16, 1, 1, 1, 1, "SAME", &conv79_out_h, &conv79_out_w);
+                                            layer_74_out, 1, 1, 576, 24, 1, 1, 1, 1, "SAME", &conv79_out_h, &conv79_out_w);
     
     // LAYER 79: HARD_SWISH (SE reduce activation)
     printf("Starting Layer 79 HARD_SWISH...\n");
-    int layer_80_size = conv79_out_h * conv79_out_w * 16;
+    int layer_80_size = conv79_out_h * conv79_out_w * 24;
     int8_t* layer_80_out = run_hardswish_layer("extracted_params_hsigmoid/layer080_HARD_SWISH_1_block5a_se_reduce_1_truediv__1_block5a_se_reduce_1_Relu6_1", "all_layer_io/layer_80_HARD_SWISH",
                                               layer_79_out, &layer_80_size);
     
-    // LAYER 80: CONV_2D (SE expand) [1,1,16] -> [1,1,384]
+    // LAYER 80: CONV_2D (SE expand) [1,1,24] -> [1,1,576]
     printf("Starting Layer 80 CONV_2D...\n");
     int conv81_out_h, conv81_out_w;
     int8_t* layer_81_out = run_conv2d_layer("extracted_params_hsigmoid/layer081_CONV_2D_1_block5a_se_expand_1_Relu6_1_block5a_se_expand_1_add_1_block5a", "all_layer_io/layer_81_CONV_2D",
-                                            layer_80_out, 1, 1, 16, 384, 1, 1, 1, 1, "SAME", &conv81_out_h, &conv81_out_w);
+                                            layer_80_out, 1, 1, 24, 576, 1, 1, 1, 1, "SAME", &conv81_out_h, &conv81_out_w);
     
     // LAYER 81: MUL (SE output scaling)
     printf("Starting Layer 81 MUL...\n");
     int8_t* layer_82_out = run_mul_layer("extracted_params_hsigmoid/layer082_MUL_1_block5a_se_expand_1_truediv", "all_layer_io/layer_82_MUL",
-                                        layer_81_out, 384, NULL, 1, 0);
+                                        layer_81_out, 576, NULL, 1, 0);
     
     // LAYER 82: MUL (SE excitation - broadcast)
     printf("Starting Layer 82 MUL...\n");
     int8_t* layer_83_out = run_mul_layer("extracted_params_hsigmoid/layer083_MUL_1_block5a_se_excite_1_Mul", "all_layer_io/layer_83_MUL",
-                                        NULL, 14*14*384, layer_82_out, 384, 1);
+                                        NULL, 14*14*576, layer_82_out, 576, 1);
     
-    // LAYER 83: CONV_2D (block5a project) [1,7,7,384] -> [1,7,7,112]
+    // LAYER 83: CONV_2D (block5a project) [1,14,14,576] -> [1,14,14,112]
     printf("Starting Layer 83 CONV_2D...\n");
     int conv84_out_h, conv84_out_w;
     int8_t* layer_84_out = run_conv2d_layer("extracted_params_hsigmoid/layer084_CONV_2D_1_block5a_project_conv_1_BiasAdd_1_block5a_project_conv_1_convo", "all_layer_io/layer_84_CONV_2D",
-                                            layer_83_out, 7, 7, 384, 112, 1, 1, 1, 1, "SAME", &conv84_out_h, &conv84_out_w);
+                                            layer_83_out, 14, 14, 576, 112, 1, 1, 1, 1, "SAME", &conv84_out_h, &conv84_out_w);
     
     // ===== LAYER 85-94: BLOCK 5b with SE and skip =====
     printf("[*] Block 5b (Layers 85-94 with SE)...\n");
     
-    // LAYER 85: CONV_2D (block5b_expand_conv) [1,7,7,112] -> [1,7,7,672]
+    // LAYER 85: CONV_2D (block5b_expand_conv) [1,14,14,112] -> [1,14,14,672]
     printf("Starting Layer 85 CONV_2D...\n");
     int conv86_out_h, conv86_out_w;
     int8_t* layer_86_out = run_conv2d_layer("extracted_params_hsigmoid/layer085_CONV_2D_1_block5b_expand_conv_1_BiasAdd_1_block5b_expand_conv_1_convolu", "all_layer_io/layer_85_CONV_2D",
-                                            layer_84_out, 7, 7, 112, 672, 1, 1, 1, 1, "SAME", &conv86_out_h, &conv86_out_w);
+                                            layer_84_out, 14, 14, 112, 672, 1, 1, 1, 1, "SAME", &conv86_out_h, &conv86_out_w);
     
     // LAYER 86: HARD_SWISH
     printf("Starting Layer 86 HARD_SWISH...\n");
@@ -458,11 +451,11 @@ int main() {
     int8_t* layer_87_out = run_hardswish_layer("extracted_params_hsigmoid/layer086_HARD_SWISH_1_block5b_expand_activation_1_truediv__1_block5b_expand_acti", "all_layer_io/layer_86_HARD_SWISH",
                                               layer_86_out, &layer_87_size);
     
-    // LAYER 87: DEPTHWISE_CONV_2D (block5b_dwconv2) [1,7,7,672] -> [1,7,7,672]
+    // LAYER 87: DEPTHWISE_CONV_2D (block5b_dwconv2) [1,14,14,672] -> [1,14,14,672]
     printf("Starting Layer 87 DEPTHWISE_CONV_2D...\n");
     int conv88_out_h, conv88_out_w;
     int8_t* layer_88_out = run_dw_conv_layer("extracted_params_hsigmoid/layer087_DEPTHWISE_CONV_2D_1_block5b_dwconv2_1_BiasAdd_1_block5b_dwconv2_1_depth",
-                                             layer_87_out, 7, 7, 672, 672, 3, 3, 1, 1, "SAME", &conv88_out_h, &conv88_out_w);
+                                             layer_87_out, 14, 14, 672, 672, 3, 3, 1, 1, "SAME", &conv88_out_h, &conv88_out_w);
     
     // LAYER 88: HARD_SWISH
     printf("Starting Layer 88 HARD_SWISH...\n");
@@ -470,10 +463,10 @@ int main() {
     int8_t* layer_89_out = run_hardswish_layer("extracted_params_hsigmoid/layer088_HARD_SWISH_1_block5b_activation_1_truediv__1_block5b_activation_1_Relu6", "all_layer_io/layer_88_HARD_SWISH",
                                               layer_88_out, &layer_89_size);
     
-    // LAYER 89: MEAN (SE squeeze) [1,7,7,672] -> [1,1,672]
+    // LAYER 89: MEAN (SE squeeze) [1,14,14,672] -> [1,1,672]
     printf("Starting Layer 89 MEAN...\n");
     int8_t* layer_90_out = run_mean_layer("extracted_params_hsigmoid/layer089_MEAN_1_block5b_se_squeeze_1_Mean", "all_layer_io/layer_89_MEAN",
-                                          layer_89_out, 7, 7, 672, 1, 0);
+                                          layer_89_out, 14, 14, 672, 1, 0);
     
     printf("Skip layer 90-93 SHAPE, STRIDED_SLICE, PACK, RESHAPE...\n");
     
@@ -484,6 +477,10 @@ int main() {
                                                       layer_90_out, 1, 1, 672, 28, 1, 1, 1, 1, "SAME", &conv95_out_h, &conv95_out_w);
     
     (void)layer_94_se_reduce_out;
+    for(int i=0; i<conv95_out_h*conv95_out_w*28; i++) {
+        printf("%d ", layer_94_se_reduce_out[i]);
+        if ((i+1) % 28 == 0) printf("\n");
+    }
 
     printf("\n=== COMPLETED LAYERS 4-94 ===\n");
     printf("Final output: Layer 94 SE reduce output ready for the next sequence step\n");
