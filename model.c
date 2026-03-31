@@ -217,7 +217,7 @@ int main() {
     // LAYER 35: MUL (SE excitation - broadcast)
     printf("Starting Layer 35 MUL...\n");
     int8_t* layer_36_out = run_mul_layer(LAYER_PARAMS[36], LAYER_IO_PATHS[36],
-                                        NULL, 14*14*192, layer_35_out, 192, 1);
+                                        layer_26_out, 14*14*192, layer_35_out, 192, 1);
     // LAYER 36: CONV_2D (block4a project) [1,14,14,192] -> [1,14,14,96]
     printf("Starting Layer 36 CONV_2D...\n");
     int conv37_out_h, conv37_out_w;
@@ -285,7 +285,7 @@ int main() {
     // LAYER 50: MUL (SE excitation - broadcast)
     printf("Starting Layer 50 MUL...\n");
     int8_t* layer_51_out = run_mul_layer(LAYER_PARAMS[51], LAYER_IO_PATHS[51],
-                                        NULL, 14*14*384, layer_50_out, 384, 1);
+                                        layer_41_out, 14*14*384, layer_50_out, 384, 1);
     // LAYER 51: CONV_2D (block4b project) [1,14,14,384] -> [1,14,14,96]
     printf("Starting Layer 51 CONV_2D...\n");
     int conv52_out_h, conv52_out_w;
@@ -356,7 +356,7 @@ int main() {
     // LAYER 66: MUL (SE excitation - broadcast)
     printf("Starting Layer 66 MUL...\n");
     int8_t* layer_67_out = run_mul_layer(LAYER_PARAMS[67], LAYER_IO_PATHS[67],
-                                        NULL, 14*14*384, layer_66_out, 384, 1);
+                                        layer_57_out, 14*14*384, layer_66_out, 384, 1);
     
     // LAYER 67: CONV_2D (block4c project) [1,14,14,384] -> [1,14,14,96]
     printf("Starting Layer 67 CONV_2D...\n");
@@ -429,7 +429,7 @@ int main() {
     // LAYER 82: MUL (SE excitation - broadcast)
     printf("Starting Layer 82 MUL...\n");
     int8_t* layer_83_out = run_mul_layer(LAYER_PARAMS[83], LAYER_IO_PATHS[83],
-                                        NULL, 14*14*576, layer_82_out, 576, 1);
+                                        layer_73_out, 14*14*576, layer_82_out, 576, 1);
     
     // LAYER 83: CONV_2D (block5a project) [1,14,14,576] -> [1,14,14,112]
     printf("Starting Layer 83 CONV_2D...\n");
@@ -502,7 +502,7 @@ int main() {
 
     printf("Starting Layer 98 MUL...\n");
     int8_t* layer_98_out = run_mul_layer(LAYER_PARAMS[98], LAYER_IO_PATHS[98],
-                                         NULL, 14*14*672, layer_97_out, 672, 1);
+                                         layer_89_out, 14*14*672, layer_97_out, 672, 1);
     printf("Starting Layer 99 CONV_2D...\n");
     int conv99_out_h, conv99_out_w;
     int8_t* layer_99_out = run_conv2d_layer(LAYER_PARAMS[99], LAYER_IO_PATHS[99],
@@ -548,7 +548,7 @@ int main() {
                                          layer_112_out, 672, NULL, 1, 0);
     printf("Starting Layer 114 MUL...\n");
     int8_t* layer_114_out = run_mul_layer(LAYER_PARAMS[114], LAYER_IO_PATHS[114],
-                                         NULL, 14*14*672, layer_113_out, 672, 1);
+                                         layer_104_out, 14*14*672, layer_113_out, 672, 1);
     printf("Starting Layer 115 CONV_2D...\n");
     int conv115_out_h, conv115_out_w;
     int8_t* layer_115_out = run_conv2d_layer(LAYER_PARAMS[115], LAYER_IO_PATHS[115],
@@ -594,7 +594,7 @@ int main() {
                                          layer_128_out, 672, NULL, 1, 0);
     printf("Starting Layer 130 MUL...\n");
     int8_t* layer_130_out = run_mul_layer(LAYER_PARAMS[130], LAYER_IO_PATHS[130],
-                                         NULL, 14*14*672, layer_129_out, 672, 1);
+                                         layer_120_out, 14*14*672, layer_129_out, 672, 1);
     printf("Starting Layer 131 CONV_2D...\n");
     int conv131_out_h, conv131_out_w;
     int8_t* layer_131_out = run_conv2d_layer(LAYER_PARAMS[131], LAYER_IO_PATHS[131],
@@ -639,7 +639,7 @@ int main() {
                                          layer_144_out, 672, NULL, 1, 0);
     printf("Starting Layer 146 MUL...\n");
     int8_t* layer_146_out = run_mul_layer(LAYER_PARAMS[146], LAYER_IO_PATHS[146],
-                                         NULL, 14*14*672, layer_145_out, 672, 1);
+                                         layer_136_out, 14*14*672, layer_145_out, 672, 1);
     printf("Starting Layer 147 CONV_2D...\n");
     int conv147_out_h, conv147_out_w;
     int8_t* layer_147_out = run_conv2d_layer(LAYER_PARAMS[147], LAYER_IO_PATHS[147],
@@ -684,7 +684,7 @@ int main() {
                                          layer_160_out, 672, NULL, 1, 0);
     printf("Starting Layer 162 MUL...\n");
     int8_t* layer_162_out = run_mul_layer(LAYER_PARAMS[162], LAYER_IO_PATHS[162],
-                                         NULL, 7*7*672, layer_161_out, 672, 1);
+                                         layer_152_out, 7*7*672, layer_161_out, 672, 1);
     printf("Starting Layer 163 CONV_2D...\n");
     int conv163_out_h, conv163_out_w;
     int8_t* layer_163_out = run_conv2d_layer(LAYER_PARAMS[163], LAYER_IO_PATHS[163],
@@ -733,7 +733,7 @@ int main() {
                                          layer_175_out, 1152, NULL, 1, 0);
     printf("Starting Layer 177 MUL...\n");
     int8_t* layer_177_out = run_mul_layer(LAYER_PARAMS[177], LAYER_IO_PATHS[177],
-                                         NULL, 7*7*1152, layer_176_out, 1152, 1);
+                                         layer_167_out, 7*7*1152, layer_176_out, 1152, 1);
     printf("Starting layer 178 Conv_2D...\n");
     int conv178_out_h, conv178_out_w;
     int8_t* layer_178_out = run_conv2d_layer(LAYER_PARAMS[178], LAYER_IO_PATHS[178],
@@ -857,11 +857,11 @@ int main() {
     int layer_215_size = conv214_out_h * conv214_out_w * 1152;
     int8_t* layer_215_out = run_hardswish_layer(LAYER_PARAMS[215], LAYER_IO_PATHS[215],
                                                 layer_214_out, &layer_215_size);
-    printf("Output of layer 215 HardSwish:\n");
-    for(int i = 0; i < conv214_out_h * conv214_out_w * 1152; ++i) {
-        printf("%d ", layer_215_out[i]);
-        if ((i + 1) % 1152 == 0) printf("\n");
-    }
+    // printf("Output of layer 215 HardSwish:\n");
+    // for(int i = 0; i < conv214_out_h * conv214_out_w * 1152; ++i) {
+    //     printf("%d ", layer_215_out[i]);
+    //     if ((i + 1) % 1152 == 0) printf("\n");
+    // }
     printf("Starting Layer 216 Mean...\n");
     int8_t* layer_216_out = run_mean_layer(LAYER_PARAMS[216], LAYER_IO_PATHS[216],
                                             layer_215_out, conv214_out_h, conv214_out_w, 1152, 1, 1);
