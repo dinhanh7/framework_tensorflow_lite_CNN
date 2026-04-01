@@ -272,14 +272,14 @@ int main(int argc, char* argv[]) {
     printf("Starting Layer 24 DEPTHWISE_CONV_2D...\n");
     int conv25_out_h, conv25_out_w;
     int8_t* layer_25_out = run_dw_conv_layer(LAYER_PARAMS[25], LAYER_IO_PATHS[25],
-                                             NULL, 28, 28, 192, 192, 3, 3, 2, 2, "SAME", &conv25_out_h, &conv25_out_w);
-    save_and_compare_debug("layer_25_dwconv_output", layer_25_out, conv25_out_h * conv25_out_w * 192, "all_layer_io/layer_25_DEPTHWISE_CONV_2D/ofm_0.txt");
+                                             layer_24_out, 28, 28, 192, 192, 3, 3, 2, 2, "SAME", &conv25_out_h, &conv25_out_w);
+    // save_and_compare_debug("layer_25_dwconv_output", layer_25_out, conv25_out_h * conv25_out_w * 192, "all_layer_io/layer_25_DEPTHWISE_CONV_2D/ofm_0.txt");
     // LAYER 25: HARD_SWISH
     printf("Starting Layer 25 HARD_SWISH...\n");
     int layer_26_size = conv25_out_h * conv25_out_w * 192;
     int8_t* layer_26_out = run_hardswish_layer(LAYER_PARAMS[26], LAYER_IO_PATHS[26],
                                               layer_25_out, &layer_26_size);
-    save_and_compare_debug("layer_26_hardswish_output", layer_26_out, layer_26_size, "all_layer_io/layer_26_HARD_SWISH/ofm_0.txt");
+    // save_and_compare_debug("layer_26_hardswish_output", layer_26_out, layer_26_size, "all_layer_io/layer_26_HARD_SWISH/ofm_0.txt");
     // LAYER 26: MEAN (SE squeeze) [1,14,14,192] -> [1,1,192]
     printf("Starting Layer 26 MEAN...\n");
     int8_t* layer_27_out = run_mean_layer(LAYER_PARAMS[27], LAYER_IO_PATHS[27],
@@ -310,7 +310,7 @@ int main(int argc, char* argv[]) {
     printf("Starting Layer 35 MUL...\n");
     int8_t* layer_36_out = run_mul_layer(LAYER_PARAMS[36], LAYER_IO_PATHS[36],
                                         layer_26_out, 14*14*192, layer_35_out, 192, 1);
-    save_and_compare_debug("layer_36_mul_se_excitation", layer_36_out, 14*14*192, "all_layer_io/layer_36_MUL/ofm_0.txt");
+    // save_and_compare_debug("layer_36_mul_se_excitation", layer_36_out, 14*14*192, "all_layer_io/layer_36_MUL/ofm_0.txt");
     // LAYER 36: CONV_2D (block4a project) [1,14,14,192] -> [1,14,14,96]
     printf("Starting Layer 36 CONV_2D...\n");
     int conv37_out_h, conv37_out_w;
@@ -602,7 +602,7 @@ int main(int argc, char* argv[]) {
                                             layer_98_out, 14, 14, 672, 112, 1, 1, 1, 1, "SAME", &conv99_out_h, &conv99_out_w);
     printf("Starting Layer 100 ADD...\n");
     int8_t* layer_100_out = run_add_layer(LAYER_PARAMS[100], LAYER_IO_PATHS[100],
-                                        layer_99_out, conv99_out_h * conv99_out_w * 112, NULL, conv99_out_h * conv99_out_w * 112);
+                                        layer_99_out, conv99_out_h * conv99_out_w * 112, layer_84_out, conv99_out_h * conv99_out_w * 112);
     
     printf("Starting Layer 101 Conv_2D...\n");
     int conv101_out_h, conv101_out_w;
@@ -1132,9 +1132,11 @@ int main(int argc, char* argv[]) {
     int layer_277_size = conv276_out_h * conv276_out_w * 1280;
     int8_t* layer_277_out = run_hardswish_layer(LAYER_PARAMS[277], LAYER_IO_PATHS[277],
                                                 layer_276_out, &layer_277_size);
+    // save_and_compare_debug("layer_277_out", layer_277_out, layer_277_size, "all_layer_io/layer_277_HARD_SWISH/ofm_0.txt");
     printf("Starting layer 278 Mean...\n");
     int8_t* layer_278_out = run_mean_layer(LAYER_PARAMS[278], LAYER_IO_PATHS[278],
                                             layer_277_out, conv276_out_h, conv276_out_w, 1280, 1, 1);
+    // save_and_compare_debug("layer_278_out", layer_278_out, 1280, "all_layer_io\\layer_278_MEAN\\ofm_0.txt");
     printf("Output of layer 278 Mean:\n");
     for(int i = 0; i < 1280; ++i) {
         printf("%d ", layer_278_out[i]);
