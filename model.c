@@ -169,16 +169,19 @@ int main(int argc, char* argv[]) {
     int conv7_out_h, conv7_out_w;
     int8_t* layer_7_out = run_conv2d_layer(LAYER_PARAMS[7], LAYER_IO_PATHS[7],
                                            layer_6_out, 112, 112, 32, 16, 3, 3, 1, 1, "SAME", &conv7_out_h, &conv7_out_w);
+    // save_and_compare_debug("layer_7_conv_output", layer_7_out, conv7_out_h * conv7_out_w * 16, "all_layer_io/layer_7_CONV_2D/ofm_0.txt");
     // LAYER 7: HARD_SWISH
     printf("Starting Layer 7 HARD_SWISH...\n");
     int layer_8_size = conv7_out_h * conv7_out_w * 16;
     int8_t* layer_8_out = run_hardswish_layer(LAYER_PARAMS[8], LAYER_IO_PATHS[8],
                                              layer_7_out, &layer_8_size);
+    
     // LAYER 8: CONV_2D (block2a_expand_conv) [1,112,112,16] -> [1,56,56,64]
     printf("Starting Layer 8 CONV_2D...\n");
     int conv9_out_h, conv9_out_w;
     int8_t* layer_9_out = run_conv2d_layer(LAYER_PARAMS[9], LAYER_IO_PATHS[9],
                                            layer_8_out, 112, 112, 16, 64, 3, 3, 2, 2, "SAME", &conv9_out_h, &conv9_out_w);
+    // save_and_compare_debug("layer_9_out", layer_9_out, conv9_out_h * conv9_out_w * 64, "all_layer_io/layer_9_CONV_2D/ofm_0.txt");
     // LAYER 9: HARD_SWISH
     printf("Starting Layer 9 HARD_SWISH...\n");
     int layer_10_size = conv9_out_h * conv9_out_w * 64;
@@ -336,7 +339,7 @@ int main(int argc, char* argv[]) {
     int conv40_out_h, conv40_out_w;
     int8_t* layer_40_out = run_dw_conv_layer(LAYER_PARAMS[40], LAYER_IO_PATHS[40],
                                              layer_39_out, 14, 14, 384, 384, 3, 3, 1, 1, "SAME", &conv40_out_h, &conv40_out_w);
-    
+    // save_and_compare_debug("layer_40_dwconv_output", layer_40_out, conv40_out_h * conv40_out_w * 384, "all_layer_io/layer_40_DEPTHWISE_CONV_2D/ofm_0.txt");
     // LAYER 40: HARD_SWISH
     printf("Starting Layer 40 HARD_SWISH...\n");
     int layer_41_size = conv40_out_h * conv40_out_w * 384;
@@ -361,7 +364,7 @@ int main(int argc, char* argv[]) {
     int layer_48_size = conv47_out_h * conv47_out_w * 24;
     int8_t* layer_48_out = run_hardswish_layer(LAYER_PARAMS[48], LAYER_IO_PATHS[48],
                                               layer_47_out, &layer_48_size);
-    
+    // save_and_compare_debug("layer_48_hardswish_se_reduce", layer_48_out, layer_48_size, "all_layer_io/layer_48_HARD_SWISH/ofm_0.txt");
     // LAYER 48: CONV_2D (SE expand) [1,1,24] -> [1,1,384]
     printf("Starting Layer 48 CONV_2D...\n");
     int conv49_out_h, conv49_out_w;
@@ -1091,6 +1094,7 @@ int main(int argc, char* argv[]) {
     int conv262_out_h, conv262_out_w;
     int8_t* layer_262_out = run_dw_conv_layer(LAYER_PARAMS[262], LAYER_IO_PATHS[262],
                                             layer_261_out, conv260_out_h, conv260_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv262_out_h, &conv262_out_w);
+    // save_and_compare_debug("layer_262_out", layer_262_out, conv262_out_h * conv262_out_w * 1152, "all_layer_io/layer_262_DEPTHWISE_CONV_2D/ofm_0.txt");
     printf("Starting layer 263 HardSwish...\n");
     int layer_263_size = conv262_out_h * conv262_out_w * 1152;
     int8_t* layer_263_out = run_hardswish_layer(LAYER_PARAMS[263], LAYER_IO_PATHS[263],
