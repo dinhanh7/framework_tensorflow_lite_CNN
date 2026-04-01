@@ -152,6 +152,7 @@ int8_t* run_conv2d_layer(const char* params_dir, const char* input_dir, int8_t* 
     int8_t* ofm_data = (int8_t*)malloc(max_ofm_size * sizeof(int8_t));
 
     if(ifm_data == NULL) {
+        printf("No IFM data provided, attempting to read from file...\n");
         ifm_data = (int8_t*)malloc(ifm_h * ifm_w * ifm_c * sizeof(int8_t));
         sprintf(path_buf, "%s/ifm.txt", input_dir);
         read_int8_array(path_buf, ifm_data, ifm_h * ifm_w * ifm_c);
@@ -305,7 +306,7 @@ int8_t* run_add_layer(const char* params_dir, const char* input_dir, int8_t* inp
     if (!input1_override) free(input1_data);
     return output_data;
 }
-int8_t* run_dw_conv_layer(const char* params_dir, int8_t* ifm_data, int ifm_h, int ifm_w, int ifm_c, int ofm_c, int kernel_h, int kernel_w, int stride_h, int stride_w, const char* padding_type, int* out_h_check, int* out_w_check) {
+int8_t* run_dw_conv_layer(const char* params_dir, const char* input_dir, int8_t* ifm_data_override, int ifm_h, int ifm_w, int ifm_c, int ofm_c, int kernel_h, int kernel_w, int stride_h, int stride_w, const char* padding_type, int* out_h_check, int* out_w_check) {
     char path_buf[512];
     float ifm_scale, ofm_scale;
     int32_t ifm_zp, ofm_zp;
@@ -342,6 +343,13 @@ int8_t* run_dw_conv_layer(const char* params_dir, int8_t* ifm_data, int ifm_h, i
     sprintf(path_buf, "%s/weight_values.txt", params_dir);
     read_int8_array(path_buf, weight_data, weight_size);
 
+    if(ifm_data_override == NULL) {
+        printf("No IFM data provided, attempting to read from file...\n");
+        ifm_data_override = (int8_t*)malloc(ifm_h * ifm_w * ifm_c * sizeof(int8_t));
+        sprintf(path_buf, "%s/ifm.txt", input_dir);
+        read_int8_array(path_buf, ifm_data_override, ifm_h * ifm_w * ifm_c);
+    }
+
     int ofm_height, ofm_width;
     if (strcmp(padding_type, "SAME") == 0) {
         ofm_height = (ifm_h + stride_h - 1) / stride_h;
@@ -375,7 +383,7 @@ int8_t* run_dw_conv_layer(const char* params_dir, int8_t* ifm_data, int ifm_h, i
         output_multipliers,
         output_shifts_int32,
         1,
-        ifm_h, ifm_w, ifm_c, ifm_data,
+        ifm_h, ifm_w, ifm_c, ifm_data_override,
         kernel_h, kernel_w, ofm_c, weight_data, // Depthwise filter channel
         ofm_c, effective_biases,
         ofm_height, ofm_width, ofm_c, ofm_data,

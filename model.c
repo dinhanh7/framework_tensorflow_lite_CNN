@@ -22,6 +22,26 @@
 #include "layer/layer_helper.h"
 #include "layer_paths.h"
 
+// Hàm tách tên file tương thích với cả Windows (\) và Linux (/)
+void get_filename_without_ext(const char* path, char* out_name) {
+    const char* slash = strrchr(path, '/');
+    const char* backslash = strrchr(path, '\\');
+    
+    // Lấy dấu phân cách nằm cuối cùng nhất
+    const char* last_slash = (slash > backslash) ? slash : backslash;
+    
+    const char* filename = last_slash ? last_slash + 1 : path;
+    const char* dot = strrchr(filename, '.');
+    
+    if (dot) {
+        strncpy(out_name, filename, dot - filename);
+        out_name[dot - filename] = '\0';
+    } else {
+        strcpy(out_name, filename);
+    }
+}
+
+
 static int8_t* load_input_tensor(const char* path, int* input_size) {
     int size = count_elements(path);
     int8_t* input_data = (int8_t*)malloc(size * sizeof(int8_t));
@@ -38,19 +58,98 @@ static int8_t* load_input_tensor(const char* path, int* input_size) {
     return input_data;
 }
 
-int main() {
+// Hàm lưu kết quả và so sánh trực tiếp với file Golden (Đáp án chuẩn từ TFLite)
+void save_and_compare_debug(const char* layer_name, int8_t* c_output, int size, const char* golden_file_path) {
+    // 1. Lưu output của C ra file (để dự phòng)
+    char filename[256];
+    sprintf(filename, "c_outputs/debug_%s.txt", layer_name);
+    
+    FILE *f_debug = fopen(filename, "w");
+    if (f_debug) {
+        for(int i = 0; i < size; ++i) {
+            fprintf(f_debug, "%d\n", c_output[i]);
+        }
+        fclose(f_debug);
+    }
+
+    // 2. Load file Golden và So sánh (Nếu có truyền đường dẫn)
+    if (golden_file_path != NULL && strlen(golden_file_path) > 0) {
+        FILE *f_golden = fopen(golden_file_path, "r");
+        if (!f_golden) {
+            printf("\n[CẢNH BÁO] Khong tim thay file golden tai: %s\n", golden_file_path);
+            printf("Hay dung Python TFLite xuat file nay truoc nhe.\n");
+        } else {
+            int8_t* golden_data = (int8_t*)malloc(size * sizeof(int8_t));
+            int temp_val;
+            int elements_read = 0;
+            
+            // Đọc file text chứa các số nguyên
+            while(fscanf(f_golden, "%d", &temp_val) == 1 && elements_read < size) {
+                golden_data[elements_read] = (int8_t)temp_val;
+                elements_read++;
+            }
+            fclose(f_golden);
+
+            if (elements_read != size) {
+                printf("\n[CẢNH BÁO] File golden chi co %d phan tu (Của C la %d phan tu)\n", elements_read, size);
+            } else {
+                // 3. Tiến hành so sánh toán học
+                int max_diff = 0;
+                int error_count_all = 0; // Số phần tử lệch > 0
+                int error_count_gt2 = 0; // Số phần tử lệch > 2 (Bỏ qua sai số do làm tròn)
+
+                for (int i = 0; i < size; ++i) {
+                    int diff = abs((int)c_output[i] - (int)golden_data[i]);
+                    if (diff > max_diff) {
+                        max_diff = diff;
+                    }
+                    if (diff > 0) error_count_all++;
+                    if (diff > 2) error_count_gt2++;
+                }
+
+                // 4. In báo cáo
+                printf("\n==================================================\n");
+                printf(" KET QUA SO SANH LAYER [%s] VOI GOLDEN FILE:\n", layer_name);
+                printf("--------------------------------------------------\n");
+                printf(" - Sai so lon nhat (Max Diff) : %d\n", max_diff);
+                printf(" - So phan tu lech (> 0)      : %d / %d (%.2f%%)\n", error_count_all, size, (float)error_count_all/size*100);
+                printf(" - So phan tu lech nhieu (> 2): %d / %d (%.2f%%)\n", error_count_gt2, size, (float)error_count_gt2/size*100);
+                
+                if (max_diff <= 1) { // Lệch 1 đơn vị thường do khác biệt float round, có thể chấp nhận
+                    printf(" ->  CHUAN XAC TUYET DOI SO VOI TFLITE!\n");
+                } else {
+                    printf(" ->  CO SAI SO TOAN HOC! Hay kiem tra lai ham C.\n");
+                }
+                printf("==================================================\n");
+            }
+            free(golden_data);
+        }
+    } else {
+        printf("\n[DEBUG] Da luu output vao %s (Khong co file Golden de so sanh)\n", filename);
+    }
+    
+    printf("=== CHUONG TRINH DUNG SOM DE DEBUG ===\n");
+    exit(0); 
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Sử dụng: %s <đường_dẫn_file_input_txt>\n", argv[0]);
+        return 1;
+    }
+
+    // Load input từ file truyền vào qua argv[1]
+    int input_size;
+    int8_t* layer_4_out = load_input_tensor(argv[1], &input_size);
+    if (!layer_4_out) {
+        printf("LỖI: Không thể đọc file input %s\n", argv[1]);
+        return 1;
+    }
+
     printf("================================================================================\n");
     printf("TFLite Model Sequence: EfficientNetV2 B0 (INT8) - Layer 4 ~ Layer 94\n");
     printf("================================================================================\n\n");
     
-    // Load input from file
-    printf("[*] Loading input tensor from ifm.txt...\n");
-    int input_size;
-    int8_t* layer_4_out = load_input_tensor("all_layer_io/layer_5_CONV_2D/ifm.txt", &input_size);
-    if (!layer_4_out) {
-        printf("ERROR: Failed to load input tensor\n");
-        return 1;
-    }
     printf("✓ Input loaded: size = %d\n\n", input_size);
     fflush(stdout);
     
@@ -65,31 +164,26 @@ int main() {
     int layer_6_size = conv5_out_h * conv5_out_w * 32;
     int8_t* layer_6_out = run_hardswish_layer(LAYER_PARAMS[6], LAYER_IO_PATHS[6],
                                              layer_5_out, &layer_6_size);
-    
     // LAYER 6: CONV_2D (block1a_project_conv) [1,112,112,32] -> [1,112,112,16]
     printf("Starting Layer 6 CONV_2D...\n");
     int conv7_out_h, conv7_out_w;
     int8_t* layer_7_out = run_conv2d_layer(LAYER_PARAMS[7], LAYER_IO_PATHS[7],
                                            layer_6_out, 112, 112, 32, 16, 3, 3, 1, 1, "SAME", &conv7_out_h, &conv7_out_w);
-    
     // LAYER 7: HARD_SWISH
     printf("Starting Layer 7 HARD_SWISH...\n");
     int layer_8_size = conv7_out_h * conv7_out_w * 16;
     int8_t* layer_8_out = run_hardswish_layer(LAYER_PARAMS[8], LAYER_IO_PATHS[8],
                                              layer_7_out, &layer_8_size);
-    
     // LAYER 8: CONV_2D (block2a_expand_conv) [1,112,112,16] -> [1,56,56,64]
     printf("Starting Layer 8 CONV_2D...\n");
     int conv9_out_h, conv9_out_w;
     int8_t* layer_9_out = run_conv2d_layer(LAYER_PARAMS[9], LAYER_IO_PATHS[9],
                                            layer_8_out, 112, 112, 16, 64, 3, 3, 2, 2, "SAME", &conv9_out_h, &conv9_out_w);
-    
     // LAYER 9: HARD_SWISH
     printf("Starting Layer 9 HARD_SWISH...\n");
     int layer_10_size = conv9_out_h * conv9_out_w * 64;
     int8_t* layer_10_out = run_hardswish_layer(LAYER_PARAMS[10], LAYER_IO_PATHS[10],
                                               layer_9_out, &layer_10_size);
-    
     // LAYER 10: CONV_2D (block2a_project_conv) [1,56,56,64] -> [1,56,56,32]
     printf("Starting Layer 10 CONV_2D...\n");
     int conv11_out_h, conv11_out_w;
@@ -101,7 +195,7 @@ int main() {
     int conv12_out_h, conv12_out_w;
     int8_t* layer_12_out = run_conv2d_layer(LAYER_PARAMS[12], LAYER_IO_PATHS[12],
                                             layer_11_out, 56, 56, 32, 128, 3, 3, 1, 1, "SAME", &conv12_out_h, &conv12_out_w);
-    
+    // save_and_compare_debug("layer_12_conv_output", layer_12_out, conv12_out_h * conv12_out_w * 128, "all_layer_io/layer_12_CONV_2D/ofm_0.txt");
     // LAYER 12: HARD_SWISH
     printf("Starting Layer 12 HARD_SWISH...\n");
     int layer_13_size = conv12_out_h * conv12_out_w * 128;
@@ -113,36 +207,34 @@ int main() {
     int conv14_out_h, conv14_out_w;
     int8_t* layer_14_out = run_conv2d_layer(LAYER_PARAMS[14], LAYER_IO_PATHS[14],
                                             layer_13_out, 56, 56, 128, 32, 1, 1, 1, 1, "SAME", &conv14_out_h, &conv14_out_w);
-    
     // LAYER 14: ADD (skip connection from layer 10)
     printf("Starting Layer 14 ADD...\n");
     int8_t* layer_15_out = run_add_layer(LAYER_PARAMS[15], LAYER_IO_PATHS[15],
                                          layer_14_out, conv14_out_h * conv14_out_w * 32, layer_11_out, conv14_out_h * conv14_out_w * 32);
-    
+    // save_and_compare_debug("layer_15_add_output", layer_15_out, conv14_out_h * conv14_out_w * 32, "all_layer_io/layer_15_ADD/ofm_0.txt");
     // LAYER 15: CONV_2D (block3a_expand_conv) [1,56,56,32] -> [1,28,28,128]
     printf("Starting Layer 15 CONV_2D...\n");
     int conv16_out_h, conv16_out_w;
     int8_t* layer_16_out = run_conv2d_layer(LAYER_PARAMS[16], LAYER_IO_PATHS[16],
                                             layer_15_out, 56, 56, 32, 128, 3, 3, 2, 2, "SAME", &conv16_out_h, &conv16_out_w);
-    
+    // save_and_compare_debug("layer_16_conv_output", layer_16_out, conv16_out_h * conv16_out_w * 128, "all_layer_io/layer_16_CONV_2D/ofm_0.txt");
     // LAYER 16: HARD_SWISH
     printf("Starting Layer 16 HARD_SWISH...\n");
     int layer_17_size = conv16_out_h * conv16_out_w * 128;
     int8_t* layer_17_out = run_hardswish_layer(LAYER_PARAMS[17], LAYER_IO_PATHS[17],
                                               layer_16_out, &layer_17_size);
-    
+    // save_and_compare_debug("layer_17_hardswish_output", layer_17_out, layer_17_size, "all_layer_io/layer_17_HARD_SWISH/ofm_0.txt");
     // LAYER 17: CONV_2D (block3a_project_conv) [1,28,28,128] -> [1,28,28,48]
     printf("Starting Layer 17 CONV_2D...\n");
     int conv18_out_h, conv18_out_w;
     int8_t* layer_18_out = run_conv2d_layer(LAYER_PARAMS[18], LAYER_IO_PATHS[18],
                                             layer_17_out, 28, 28, 128, 48, 1, 1, 1, 1, "SAME", &conv18_out_h, &conv18_out_w);
-    
     // LAYER 18: CONV_2D (block3b_expand_conv) [1,28,28,48] -> [1,28,28,192]
     printf("Starting Layer 18 CONV_2D...\n");
     int conv19_out_h, conv19_out_w;
     int8_t* layer_19_out = run_conv2d_layer(LAYER_PARAMS[19], LAYER_IO_PATHS[19],
                                             layer_18_out, 28, 28, 48, 192, 3, 3, 1, 1, "SAME", &conv19_out_h, &conv19_out_w);
-    
+    // save_and_compare_debug("layer_19_conv_output", layer_19_out, conv19_out_h * conv19_out_w * 192, "all_layer_io/layer_19_CONV_2D/ofm_0.txt");
     // LAYER 19: HARD_SWISH
     printf("Starting Layer 19 HARD_SWISH...\n");
     int layer_20_size = conv19_out_h * conv19_out_w * 192;
@@ -153,12 +245,12 @@ int main() {
     int conv21_out_h, conv21_out_w;
     int8_t* layer_21_out = run_conv2d_layer(LAYER_PARAMS[21], LAYER_IO_PATHS[21],
                                             layer_20_out, 28, 28, 192, 48, 1, 1, 1, 1, "SAME", &conv21_out_h, &conv21_out_w);
-    
+    // save_and_compare_debug("layer_21_conv_output", layer_21_out, conv21_out_h * conv21_out_w * 48, "all_layer_io/layer_21_CONV_2D/ofm_0.txt");
     // LAYER 21: ADD (skip connection from layer 17)
     printf("Starting Layer 21 ADD...\n");
     int8_t* layer_22_out = run_add_layer(LAYER_PARAMS[22], LAYER_IO_PATHS[22],
                                          layer_21_out, conv21_out_h * conv21_out_w * 48, layer_18_out, conv21_out_h * conv21_out_w * 48);
-    
+    // save_and_compare_debug("layer_22_add_output", layer_22_out, conv21_out_h * conv21_out_w * 48, "all_layer_io/layer_22_ADD/ofm_0.txt");
     printf("\n>>> BLOCKS 4a-5a (Layers 22-94) <<<\n\n");
     
     // ===== LAYER 22-35: BLOCK 4a with SE =====
@@ -169,7 +261,7 @@ int main() {
     int conv23_out_h, conv23_out_w;
     int8_t* layer_23_out = run_conv2d_layer(LAYER_PARAMS[23], LAYER_IO_PATHS[23],
                                             layer_22_out, 28, 28, 48, 192, 1, 1, 1, 1, "SAME", &conv23_out_h, &conv23_out_w);
-    
+    // save_and_compare_debug("layer_23_conv_output", layer_23_out, conv23_out_h * conv23_out_w * 192, "all_layer_io/layer_23_CONV_2D/ofm_0.txt");
     // LAYER 23: HARD_SWISH
     printf("Starting Layer 23 HARD_SWISH...\n");
     int layer_24_size = conv23_out_h * conv23_out_w * 192;
@@ -179,14 +271,15 @@ int main() {
     // LAYER 24: DEPTHWISE_CONV_2D (block4a_dwconv2) [1,28,28,192] -> [1,14,14,192]
     printf("Starting Layer 24 DEPTHWISE_CONV_2D...\n");
     int conv25_out_h, conv25_out_w;
-    int8_t* layer_25_out = run_dw_conv_layer(LAYER_PARAMS[25], 
-                                             layer_24_out, 28, 28, 192, 192, 3, 3, 2, 2, "SAME", &conv25_out_h, &conv25_out_w);
-    
+    int8_t* layer_25_out = run_dw_conv_layer(LAYER_PARAMS[25], LAYER_IO_PATHS[25],
+                                             NULL, 28, 28, 192, 192, 3, 3, 2, 2, "SAME", &conv25_out_h, &conv25_out_w);
+    save_and_compare_debug("layer_25_dwconv_output", layer_25_out, conv25_out_h * conv25_out_w * 192, "all_layer_io/layer_25_DEPTHWISE_CONV_2D/ofm_0.txt");
     // LAYER 25: HARD_SWISH
     printf("Starting Layer 25 HARD_SWISH...\n");
     int layer_26_size = conv25_out_h * conv25_out_w * 192;
     int8_t* layer_26_out = run_hardswish_layer(LAYER_PARAMS[26], LAYER_IO_PATHS[26],
                                               layer_25_out, &layer_26_size);
+    save_and_compare_debug("layer_26_hardswish_output", layer_26_out, layer_26_size, "all_layer_io/layer_26_HARD_SWISH/ofm_0.txt");
     // LAYER 26: MEAN (SE squeeze) [1,14,14,192] -> [1,1,192]
     printf("Starting Layer 26 MEAN...\n");
     int8_t* layer_27_out = run_mean_layer(LAYER_PARAMS[27], LAYER_IO_PATHS[27],
@@ -209,7 +302,6 @@ int main() {
     int conv34_out_h, conv34_out_w;
     int8_t* layer_34_out = run_conv2d_layer(LAYER_PARAMS[34], LAYER_IO_PATHS[34],
                                             layer_33_out, 1, 1, 12, 192, 1, 1, 1, 1, "SAME", &conv34_out_h, &conv34_out_w);
-    
     // LAYER 34: MUL (SE output scaling)
     printf("Starting Layer 34 MUL...\n");
     int8_t* layer_35_out = run_mul_layer(LAYER_PARAMS[35], LAYER_IO_PATHS[35],
@@ -218,6 +310,7 @@ int main() {
     printf("Starting Layer 35 MUL...\n");
     int8_t* layer_36_out = run_mul_layer(LAYER_PARAMS[36], LAYER_IO_PATHS[36],
                                         layer_26_out, 14*14*192, layer_35_out, 192, 1);
+    save_and_compare_debug("layer_36_mul_se_excitation", layer_36_out, 14*14*192, "all_layer_io/layer_36_MUL/ofm_0.txt");
     // LAYER 36: CONV_2D (block4a project) [1,14,14,192] -> [1,14,14,96]
     printf("Starting Layer 36 CONV_2D...\n");
     int conv37_out_h, conv37_out_w;
@@ -241,7 +334,7 @@ int main() {
     // LAYER 39: DEPTHWISE_CONV_2D (block4b_dwconv2) [1,14,14,384] -> [1,14,14,384]
     printf("Starting Layer 39 DEPTHWISE_CONV_2D...\n");
     int conv40_out_h, conv40_out_w;
-    int8_t* layer_40_out = run_dw_conv_layer(LAYER_PARAMS[40],
+    int8_t* layer_40_out = run_dw_conv_layer(LAYER_PARAMS[40], LAYER_IO_PATHS[40],
                                              layer_39_out, 14, 14, 384, 384, 3, 3, 1, 1, "SAME", &conv40_out_h, &conv40_out_w);
     
     // LAYER 40: HARD_SWISH
@@ -315,7 +408,7 @@ int main() {
     // LAYER 55: DEPTHWISE_CONV_2D (block4c_dwconv2) [1,14,14,384] -> [1,14,14,384]
     printf("Starting Layer 55 DEPTHWISE_CONV_2D...\n");
     int conv56_out_h, conv56_out_w;
-    int8_t* layer_56_out = run_dw_conv_layer(LAYER_PARAMS[56],
+    int8_t* layer_56_out = run_dw_conv_layer(LAYER_PARAMS[56], LAYER_IO_PATHS[56],
                                              layer_55_out, 14, 14, 384, 384, 3, 3, 1, 1, "SAME", &conv56_out_h, &conv56_out_w);
     
     // LAYER 56: HARD_SWISH
@@ -387,7 +480,7 @@ int main() {
     // LAYER 71: DEPTHWISE_CONV_2D (block5a_dwconv2) [1,14,14,576] -> [1,14,14,576]
     printf("Starting Layer 71 DEPTHWISE_CONV_2D...\n");
     int conv72_out_h, conv72_out_w;
-    int8_t* layer_72_out = run_dw_conv_layer(LAYER_PARAMS[72],
+    int8_t* layer_72_out = run_dw_conv_layer(LAYER_PARAMS[72], LAYER_IO_PATHS[72],
                                              layer_71_out, 14, 14, 576, 576, 3, 3, 1, 1, "SAME", &conv72_out_h, &conv72_out_w);
     
     // LAYER 72: HARD_SWISH
@@ -455,8 +548,8 @@ int main() {
     // LAYER 87: DEPTHWISE_CONV_2D (block5b_dwconv2) [1,14,14,672] -> [1,14,14,672]
     printf("Starting Layer 87 DEPTHWISE_CONV_2D...\n");
     int conv88_out_h, conv88_out_w;
-    int8_t* layer_88_out = run_dw_conv_layer(LAYER_PARAMS[87], 
-                                             layer_87_out, 14, 14, 672, 672, 3, 3, 1, 1, "SAME", &conv88_out_h, &conv88_out_w);
+    int8_t* layer_88_out = run_dw_conv_layer(LAYER_PARAMS[87], LAYER_IO_PATHS[87],
+                                              layer_87_out, 14, 14, 672, 672, 3, 3, 1, 1, "SAME", &conv88_out_h, &conv88_out_w);
     
     // LAYER 88: HARD_SWISH
     printf("Starting Layer 88 HARD_SWISH...\n");
@@ -521,7 +614,7 @@ int main() {
                                                 layer_101_out, &layer_102_size);
     printf("Starting Layer 103 DepthwiseConv2D...\n");
     int conv103_out_h, conv103_out_w;
-    int8_t* layer_103_out = run_dw_conv_layer(LAYER_PARAMS[103],
+    int8_t* layer_103_out = run_dw_conv_layer(LAYER_PARAMS[103], LAYER_IO_PATHS[103],
                                             layer_102_out, conv101_out_h, conv101_out_w, 672, 672, 3, 3, 1, 1, "SAME", &conv103_out_h, &conv103_out_w);
     printf("Starting Layer 104 HardSwish...\n");
     int layer_104_size = conv103_out_h * conv103_out_w * 672;
@@ -567,7 +660,7 @@ int main() {
                                                 layer_117_out, &layer_118_size);
     printf("Starting Layer 119 DepthwiseConv2D...\n");
     int conv119_out_h, conv119_out_w;
-    int8_t* layer_119_out = run_dw_conv_layer(LAYER_PARAMS[119],
+    int8_t* layer_119_out = run_dw_conv_layer(LAYER_PARAMS[119], LAYER_IO_PATHS[119],
                                             layer_118_out, conv117_out_h, conv117_out_w, 672, 672, 3, 3, 1, 1, "SAME", &conv119_out_h, &conv119_out_w);
     printf("Starting Layer 120 HardSwish...\n");
     int layer_120_size = conv119_out_h * conv119_out_w * 672;
@@ -612,7 +705,7 @@ int main() {
                                                 layer_133_out, &layer_134_size);
     printf("Starting Layer 135 DepthwiseConv2D...\n");
     int conv135_out_h, conv135_out_w;
-    int8_t* layer_135_out = run_dw_conv_layer(LAYER_PARAMS[135], 
+    int8_t* layer_135_out = run_dw_conv_layer(LAYER_PARAMS[135], LAYER_IO_PATHS[135],
                                             layer_134_out, conv133_out_h, conv133_out_w, 672, 672, 3, 3, 1, 1, "SAME", &conv135_out_h, &conv135_out_w);
     printf("Starting Layer 136 HardSwish...\n");
     int layer_136_size = conv135_out_h * conv135_out_w * 672;
@@ -657,7 +750,7 @@ int main() {
                                                 layer_149_out, &layer_150_size);
     printf("Starting Layer 151 DepthwiseConv2D...\n");
     int conv151_out_h, conv151_out_w;
-    int8_t* layer_151_out = run_dw_conv_layer(LAYER_PARAMS[151],
+    int8_t* layer_151_out = run_dw_conv_layer(LAYER_PARAMS[151], LAYER_IO_PATHS[151],
                                             layer_150_out, conv149_out_h, conv149_out_w, 672, 672, 3, 3, 2, 2, "SAME", &conv151_out_h, &conv151_out_w);
     printf("Starting Layer 152 HardSwish...\n");
     int layer_152_size = conv151_out_h * conv151_out_w * 672;
@@ -699,7 +792,7 @@ int main() {
                                                 layer_164_out, &layer_165_size);
     printf("Starting Layer 166 DepthwiseConv2D...\n");
     int conv166_out_h, conv166_out_w;
-    int8_t* layer_166_out = run_dw_conv_layer(LAYER_PARAMS[166],
+    int8_t* layer_166_out = run_dw_conv_layer(LAYER_PARAMS[166], LAYER_IO_PATHS[166],
                                             layer_165_out, conv164_out_h, conv164_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv166_out_h, &conv166_out_w);
     printf("Starting Layer 167 HardSwish...\n");
     int layer_167_size = conv166_out_h * conv166_out_w * 1152;
@@ -756,7 +849,7 @@ int main() {
                                                 layer_180_out, &layer_181_size);
     printf("Starting Layer 182 DepthwiseConv2D...\n");
     int conv182_out_h, conv182_out_w;
-    int8_t* layer_182_out = run_dw_conv_layer(LAYER_PARAMS[182],
+    int8_t* layer_182_out = run_dw_conv_layer(LAYER_PARAMS[182], LAYER_IO_PATHS[182],
                                             layer_181_out, conv180_out_h, conv180_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv182_out_h, &conv182_out_w);
     printf("Starting Layer 183 HardSwish...\n");
     int layer_183_size = conv182_out_h * conv182_out_w * 1152;
@@ -801,7 +894,7 @@ int main() {
                                                 layer_196_out, &layer_197_size);
     printf("Starting Layer 198 DepthwiseConv2D...\n");
     int conv198_out_h, conv198_out_w;
-    int8_t* layer_198_out = run_dw_conv_layer(LAYER_PARAMS[198],
+    int8_t* layer_198_out = run_dw_conv_layer(LAYER_PARAMS[198], LAYER_IO_PATHS[198],
                                             layer_197_out, conv196_out_h, conv196_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv198_out_h, &conv198_out_w);
     printf("Starting Layer 199 HardSwish...\n");
     int layer_199_size = conv198_out_h * conv198_out_w * 1152;
@@ -851,7 +944,7 @@ int main() {
                                                 layer_212_out, &layer_213_size);
     printf("Starting Layer 214 DepthwiseConv2D...\n");
     int conv214_out_h, conv214_out_w;
-    int8_t* layer_214_out = run_dw_conv_layer(LAYER_PARAMS[214],
+    int8_t* layer_214_out = run_dw_conv_layer(LAYER_PARAMS[214], LAYER_IO_PATHS[214],
                                             layer_213_out, conv212_out_h, conv212_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv214_out_h, &conv214_out_w);
     printf("Starting Layer 215 HardSwish...\n");
     int layer_215_size = conv214_out_h * conv214_out_w * 1152;
@@ -906,7 +999,7 @@ int main() {
                                                 layer_228_out, &layer_229_size);
     printf("Starting Layer 230 DepthwiseConv2D...\n");
     int conv230_out_h, conv230_out_w;
-    int8_t* layer_230_out = run_dw_conv_layer(LAYER_PARAMS[230],
+    int8_t* layer_230_out = run_dw_conv_layer(LAYER_PARAMS[230], LAYER_IO_PATHS[230],
                                             layer_229_out, conv228_out_h, conv228_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv230_out_h, &conv230_out_w);
     printf("Starting Layer 231 HardSwish...\n");
     int layer_231_size = conv230_out_h * conv230_out_w * 1152;
@@ -951,7 +1044,7 @@ int main() {
                                                 layer_244_out, &layer_245_size);
     printf("Starting Layer 246 DepthwiseConv2D...\n");
     int conv246_out_h, conv246_out_w;
-    int8_t* layer_246_out = run_dw_conv_layer(LAYER_PARAMS[246],
+    int8_t* layer_246_out = run_dw_conv_layer(LAYER_PARAMS[246], LAYER_IO_PATHS[246],
                                             layer_245_out, conv244_out_h, conv244_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv246_out_h, &conv246_out_w);
     printf("Starting Layer 247 HardSwish...\n");
     int layer_247_size = conv246_out_h * conv246_out_w * 1152;
@@ -996,7 +1089,7 @@ int main() {
                                                 layer_260_out, &layer_261_size);
     printf("Starting layer 262 DepthwiseConv2D...\n");
     int conv262_out_h, conv262_out_w;
-    int8_t* layer_262_out = run_dw_conv_layer(LAYER_PARAMS[262], 
+    int8_t* layer_262_out = run_dw_conv_layer(LAYER_PARAMS[262], LAYER_IO_PATHS[262],
                                             layer_261_out, conv260_out_h, conv260_out_w, 1152, 1152, 3, 3, 1, 1, "SAME", &conv262_out_h, &conv262_out_w);
     printf("Starting layer 263 HardSwish...\n");
     int layer_263_size = conv262_out_h * conv262_out_w * 1152;
@@ -1046,7 +1139,24 @@ int main() {
     for(int i = 0; i < 1280; ++i) {
         printf("%d ", layer_278_out[i]);
     }
-    printf("\n");
+    
+    // -- LƯU KẾT QUẢ LAYER 278 RA FILE --
+    char base_name[128];
+    get_filename_without_ext(argv[1], base_name);
+
+    char out_filepath[256];
+    // Đảm bảo thư mục c_outputs đã được tạo trước khi chạy (trong bash script)
+    sprintf(out_filepath, "c_outputs/out278_%s.txt", base_name); 
+
+    FILE *fout = fopen(out_filepath, "w");
+    if (fout) {
+        for(int i = 0; i < 1280; ++i) {
+            fprintf(fout, "%d\n", layer_278_out[i]); // In từng số trên 1 dòng
+        }
+        fclose(fout);
+    } else {
+        printf("LỖI: Không thể tạo file ghi kết quả %s\n", out_filepath);
+    }
 
     return 0;
 }

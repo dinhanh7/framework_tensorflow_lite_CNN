@@ -122,6 +122,7 @@ void quantized_conv2d(
             accumulator[i * ofm_channels + oc] += effective_bias_data[oc];
         }
     }
+    // printf("DEBUG: idx=0, accumulator after bias = %d, effective_bias = %d\\n", accumulator[0], effective_bias_data[0]);
 
     // --- 6. Tái lượng tử hóa ---
     for (int i = 0; i < ofm_height * ofm_width; ++i) {
