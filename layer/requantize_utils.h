@@ -17,14 +17,64 @@ static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
     return (int32_t)result_64;
 }
 
-// Tái hiện hàm `RoundingRightShift` (Symmetric Rounding - giống gemmlowp::RoundingDivideByPOT)
-// Giúp xử lý các trường hợp làm tròn số âm chính xác hơn so với (x + nudge) >> shift
+
 static int32_t RoundingRightShift(int32_t x, int shift) {
     if (shift <= 0) return x;
     int32_t mask = (1 << shift) - 1;
     int32_t remainder = x & mask;
     int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
     return (x >> shift) + (remainder > threshold ? 1 : 0);
+}
+
+// Tái hiện hàm `RoundingRightShift` (Symmetric Rounding - giống gemmlowp::RoundingDivideByPOT)
+// Giúp xử lý các trường hợp làm tròn số âm chính xác hơn so với (x + nudge) >> shift
+static int32_t RoundingRightShiftDWConv(int32_t x, int shift) {
+    if (shift <= 0) return x;
+    int32_t mask = (1 << shift) - 1;
+    int32_t remainder = x & mask;
+    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
+    return (x >> shift) + (remainder > threshold ? 1 : 0);
+}
+
+static int32_t RoundingRightShiftConv(int32_t x, int8_t shift) {
+    if (shift <= 0) {
+        return x;
+    }
+    int64_t nudge = (int64_t)1 << (shift - 1);
+    int64_t result_64 = (x + nudge) >> shift;
+    return (int32_t)result_64;
+}
+
+static inline int32_t MultiplyByQuantizedMultiplierDWConv(int32_t x, int32_t quantized_multiplier, int32_t shift) {
+    int32_t left_shift = (shift > 0) ? shift : 0;
+    int32_t right_shift = (shift < 0) ? -shift : 0;
+    int64_t x_shifted_64 = (int64_t)x << left_shift;
+    int32_t x_shifted_32;
+    if (x_shifted_64 > 2147483647LL) {
+        x_shifted_32 = 2147483647;
+    } else if (x_shifted_64 < -2147483648LL) {
+        x_shifted_32 = -2147483648LL;
+    } else {
+        x_shifted_32 = (int32_t)x_shifted_64;
+    }
+    int32_t high_mul = SaturatingRoundingDoublingHighMul(x_shifted_32, quantized_multiplier);
+    return RoundingRightShiftDWConv(high_mul, right_shift);
+}
+
+static inline int32_t MultiplyByQuantizedMultiplierConv(int32_t x, int32_t quantized_multiplier, int32_t shift) {
+    int32_t left_shift = (shift > 0) ? shift : 0;
+    int32_t right_shift = (shift < 0) ? -shift : 0;
+    int64_t x_shifted_64 = (int64_t)x << left_shift;
+    int32_t x_shifted_32;
+    if (x_shifted_64 > 2147483647LL) {
+        x_shifted_32 = 2147483647;
+    } else if (x_shifted_64 < -2147483648LL) {
+        x_shifted_32 = -2147483648LL;
+    } else {
+        x_shifted_32 = (int32_t)x_shifted_64;
+    }
+    int32_t high_mul = SaturatingRoundingDoublingHighMul(x_shifted_32, quantized_multiplier);
+    return RoundingRightShiftConv(high_mul, right_shift);
 }
 
 static inline int32_t MultiplyByQuantizedMultiplier(int32_t x, int32_t quantized_multiplier, int32_t shift) {

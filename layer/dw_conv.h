@@ -161,7 +161,7 @@ void DepthwiseConvPerChannel(
             }
             
             // 7. Nhân với multiplier và shift
-            acc = MultiplyByQuantizedMultiplier(
+            acc = MultiplyByQuantizedMultiplierDWConv(
                 acc, 
                 output_multiplier[output_channel], 
                 output_shift[output_channel]);

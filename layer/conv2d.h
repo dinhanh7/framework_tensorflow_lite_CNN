@@ -131,7 +131,7 @@ void quantized_conv2d(
             int32_t acc_val = accumulator[idx];
             int32_t m = output_multiplier[oc];
             int8_t n = output_shift[oc];
-            int32_t res_scaled = MultiplyByQuantizedMultiplier(acc_val, m, n);
+            int32_t res_scaled = MultiplyByQuantizedMultiplierConv(acc_val, m, n);
             int32_t res_final = res_scaled + ofm_zp;
             ofm_data[idx] = clip_int8(res_final);
         }
