@@ -72,10 +72,8 @@ int main() {
     int8_t* output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
     
     
-    // params paths
-    // Note: The folder name in extracted_params usually matches the layer name
-    const char* param_dir = "extracted_params/layer042_MEAN_1_block4b_se_squeeze_1_Mean";
-    const char* io_dir = "all_layer_io/layer_42_MEAN";
+    const char* param_dir = "extracted_params_hsigmoid/layer058_MEAN_1_block4c_se_squeeze_1_Mean";
+    const char* io_dir = "all_layer_io/layer_58_MEAN";
     char param_path[256];
 
     printf("Reading input data...\n");
@@ -116,8 +114,10 @@ int main() {
     );
 
     char out_path[256];
-    sprintf(out_path, "%s/ofm.txt", param_dir);
+    sprintf(out_path, "%s/ofm_0_c_sim.txt", io_dir);
     write_int8_file(out_path, output_data, output_size);
 
+    free(input_data);
+    free(output_data);
     return 0;
 }

@@ -7,14 +7,13 @@
 
 // Tái hiện hàm `SaturatingRoundingDoublingHighMul` (Đã đồng bộ với phiên bản TFLite chính xác)
 static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
-    int64_t a_64 = a;
-    int64_t b_64 = b;
-    int64_t ab_64 = a_64 * b_64;
-    int64_t nudge = (1LL << 30);
-    int64_t result_64 = (ab_64 + nudge) >> 31;
-    if (result_64 > 2147483647LL) return 2147483647;
-    if (result_64 < -2147483648LL) return -2147483648LL;
-    return (int32_t)result_64;
+    const int64_t a_64 = a;
+    const int64_t b_64 = b;
+    const int64_t ab_64 = a_64 * b_64;
+    const int overflow = (a == INT32_MIN && b == INT32_MIN);
+    const int64_t nudge = (ab_64 >= 0) ? (1LL << 30) : (1LL - (1LL << 30));
+    const int32_t ab_x2_high32 = (int32_t)((ab_64 + nudge) >> 31);
+    return overflow ? INT32_MAX : ab_x2_high32;
 }
 
 
@@ -22,7 +21,7 @@ static int32_t RoundingRightShift(int32_t x, int shift) {
     if (shift <= 0) return x;
     int32_t mask = (1 << shift) - 1;
     int32_t remainder = x & mask;
-    int32_t threshold = (mask >> 1) + (x < 0 ? 1 : 0);
+    int32_t threshold = (mask >> 1);
     return (x >> shift) + (remainder > threshold ? 1 : 0);
 }
 
@@ -158,6 +157,20 @@ static void QuantizeMultiplier(double double_multiplier, int32_t* quantized_mult
     if (q_fixed > 2147483647LL) q_fixed = 2147483647LL; 
     
     *quantized_multiplier = (int32_t)q_fixed;
+}
+
+static inline int CountLeadingZeros64(uint64_t x) {
+    if (x == 0) return 64;
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_clzll(x);
+#else
+    int count = 0;
+    while ((x & (1ULL << 63)) == 0) {
+        x <<= 1;
+        ++count;
+    }
+    return count;
+#endif
 }
 int16_t SaturatingLeftShift(int16_t val, int shift) {
     int32_t res = (int32_t)val * (1 << shift);

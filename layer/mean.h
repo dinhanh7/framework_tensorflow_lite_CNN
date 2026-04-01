@@ -40,23 +40,32 @@ void quantized_mean_int8(
     int32_t output_zp
 ) {
     // 1. Tính toán real_scale (giống hệt mean.h)
-    const float num_elements_in_axis = (float)(input_width * input_height);
-    const double real_scale = (double)input_scale / (num_elements_in_axis * (double)output_scale);
+    const int32_t num_elements_in_axis = input_width * input_height;
+    const double real_multiplier =
+        (double)input_scale / (double)output_scale;
 
     // 2. Lượng tử hóa real_scale để lấy multiplier và shift (giống hệt mean.h)
-    int32_t multiplier;
-    int shift;
-    QuantizeMultiplier(real_scale, &multiplier, &shift);
+    int32_t output_multiplier;
+    int output_shift;
+    QuantizeMultiplier(real_multiplier, &output_multiplier, &output_shift);
 
     // 3. Tính toán bias (giống hệt mean.h)
-    double temp = (double)input_zp * (double)input_scale / (double)output_scale;
-    temp = (temp > 0) ? (temp + 0.5f) : (temp - 0.5f);
-    int32_t bias = output_zp - (int32_t)temp;
+    int reduction_shift =
+        63 - CountLeadingZeros64((uint64_t)num_elements_in_axis);
+    reduction_shift = reduction_shift < 32 ? reduction_shift : 32;
+    reduction_shift =
+        reduction_shift < (31 + output_shift) ? reduction_shift
+                                              : (31 + output_shift);
+
+    output_multiplier =
+        (int32_t)(((int64_t)output_multiplier << reduction_shift) /
+                  num_elements_in_axis);
+    output_shift -= reduction_shift;
 
     // 4. Thực thi phép tính (mô phỏng MeanImpl từ mean.h)
     for (int b = 0; b < input_batch; ++b) {
         for (int oc = 0; oc < output_channels; ++oc) {
-            int32_t acc = 0;
+            int32_t temp_sum = 0;
             // Tích lũy giá trị trên height và width
             for (int h = 0; h < input_height; ++h) {
                 for (int w = 0; w < input_width; ++w) {
@@ -64,13 +73,15 @@ void quantized_mean_int8(
                                 h * (input_width * input_channels) +
                                 w * (input_channels) +
                                 oc;
-                    acc += input_data[index];
+                    temp_sum += input_data[index];
                 }
             }
 
             // Tái lượng tử hóa theo chuẩn TFLite
-            acc = MultiplyByQuantizedMultiplier(acc, multiplier, shift);
-            acc += bias;
+            int32_t shifted_sum = temp_sum - input_zp * num_elements_in_axis;
+            int32_t acc = MultiplyByQuantizedMultiplier(
+                shifted_sum, output_multiplier, output_shift);
+            acc += output_zp;
 
             // Kẹp giá trị và lưu kết quả
             int output_index = b * output_channels + oc;
