@@ -8,8 +8,8 @@
 #define BATCH 1
 #define HEIGHT 14
 #define WIDTH 14
-#define CHANNELS 384
-#define OUTPUT_CHANNELS 384
+#define CHANNELS 576
+#define OUTPUT_CHANNELS 576
 
 // Helper to read int8 array from file
 void read_int8_array(const char* filename, int8_t* buffer, int size) {
@@ -72,27 +72,29 @@ int main() {
     int8_t* output_data = (int8_t*)malloc(output_size * sizeof(int8_t));
     
     
-    const char* param_dir = "extracted_params_hsigmoid/layer058_MEAN_1_block4c_se_squeeze_1_Mean";
-    const char* io_dir = "all_layer_io/layer_58_MEAN";
+    const char* param_dir = "extracted_params_hsigmoid\\layer074_MEAN_1_block5a_se_squeeze_1_Mean";
+    const char* io_dir = "all_layer_io\\layer_74_MEAN";
     char param_path[256];
 
     printf("Reading input data...\n");
+    printf("IO Directory: %s\n", io_dir);
     char in_path[256];
-    sprintf(in_path, "%s/ifm_0.txt", io_dir);
+    sprintf(in_path, "%s\\ifm_0.txt", io_dir);
+    printf("Full input path: %s\n", in_path);
     read_int8_array(in_path, input_data, input_size);
 
 
     printf("Reading quantization parameters...\n");
-    sprintf(param_path, "%s/ifm_scale.txt", param_dir);
+    sprintf(param_path, "%s\\ifm_scale.txt", param_dir);
     float input_scale = read_float(param_path);
 
-    sprintf(param_path, "%s/ifm_zp.txt", param_dir);
+    sprintf(param_path, "%s\\ifm_zp.txt", param_dir);
     int32_t input_zp = read_int(param_path);
 
-    sprintf(param_path, "%s/ofm_scale.txt", param_dir);
+    sprintf(param_path, "%s\\ofm_scale.txt", param_dir);
     float output_scale = read_float(param_path);
 
-    sprintf(param_path, "%s/ofm_zp.txt", param_dir);
+    sprintf(param_path, "%s\\ofm_zp.txt", param_dir);
     int32_t output_zp = read_int(param_path);
 
     printf("Params: Input Scale=%f, Input ZP=%d, Output Scale=%f, Output ZP=%d\n", 
@@ -114,7 +116,7 @@ int main() {
     );
 
     char out_path[256];
-    sprintf(out_path, "%s/ofm_0_c_sim.txt", io_dir);
+    sprintf(out_path, "%s\\ofm_0_c_sim.txt", io_dir);
     write_int8_file(out_path, output_data, output_size);
 
     free(input_data);

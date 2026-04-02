@@ -419,6 +419,10 @@ int8_t* run_mean_layer(const char* params_dir, const char* input_dir, int8_t* in
     if (input_data_override) {
         input_data = input_data_override;
     } else {
+        if (!use_input_file) {
+            fprintf(stderr, "run_mean_layer: missing input buffer for %s\n", params_dir);
+            return NULL;
+        }
         input_data = (int8_t*)malloc(ifm_size * sizeof(int8_t));
         if (use_input_file) {
             sprintf(path_buf, "%s/ifm_0.txt", input_dir);

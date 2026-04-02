@@ -16,6 +16,16 @@ static int32_t SaturatingRoundingDoublingHighMul(int32_t a, int32_t b) {
     return overflow ? INT32_MAX : ab_x2_high32;
 }
 
+static int32_t SaturatingRoundingDoublingHighMulConvDw(int32_t a, int32_t b) {
+    const int64_t a_64 = a;
+    const int64_t b_64 = b;
+    const int64_t ab_64 = a_64 * b_64;
+    const int overflow = (a == INT32_MIN && b == INT32_MIN);
+    const int64_t nudge = (1LL << 30);
+    const int32_t ab_x2_high32 = (int32_t)((ab_64 + nudge) >> 31);
+    return overflow ? INT32_MAX : ab_x2_high32;
+}
+
 
 static int32_t RoundingRightShift(int32_t x, int shift) {
     if (shift <= 0) return x;
@@ -56,7 +66,7 @@ static inline int32_t MultiplyByQuantizedMultiplierDWConv(int32_t x, int32_t qua
     } else {
         x_shifted_32 = (int32_t)x_shifted_64;
     }
-    int32_t high_mul = SaturatingRoundingDoublingHighMul(x_shifted_32, quantized_multiplier);
+    int32_t high_mul = SaturatingRoundingDoublingHighMulConvDw(x_shifted_32, quantized_multiplier);
     return RoundingRightShiftDWConv(high_mul, right_shift);
 }
 
@@ -72,7 +82,7 @@ static inline int32_t MultiplyByQuantizedMultiplierConv(int32_t x, int32_t quant
     } else {
         x_shifted_32 = (int32_t)x_shifted_64;
     }
-    int32_t high_mul = SaturatingRoundingDoublingHighMul(x_shifted_32, quantized_multiplier);
+    int32_t high_mul = SaturatingRoundingDoublingHighMulConvDw(x_shifted_32, quantized_multiplier);
     return RoundingRightShiftConv(high_mul, right_shift);
 }
 
@@ -181,8 +191,8 @@ int16_t SaturatingLeftShift(int16_t val, int shift) {
 static inline int32_t RoundingDivideByPOT_32(int32_t x, int exponent) {
     if (exponent <= 0) return x;
     int32_t mask = (1 << exponent) - 1;
-    int32_t bias = (1 << (exponent - 1));
     int32_t remainder = x & mask;
+    int32_t bias = (1 << (exponent - 1));
     int32_t result = x >> exponent;
     if (remainder > bias || (remainder == bias && (result & 1))) {
         result++;

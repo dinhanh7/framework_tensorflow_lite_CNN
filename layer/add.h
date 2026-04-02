@@ -128,4 +128,4 @@ static inline void Add(const struct AddArithmeticParams* params,
     AddElementwise(total_elements, params, input1_data, input2_data, output_data);
 }
 
-#endif  // TENSORFLOW_LITE_MICRO_ADD_H_
+#endif  // TENSORFLOW_LITE_MICRO_ADD_H_ 
