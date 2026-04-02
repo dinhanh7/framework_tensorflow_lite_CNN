@@ -6,14 +6,14 @@
 #include "../layer/conv2d.h"
 
 // Define constants for this specific layer test (Layer 5: Stem Conv)
-#define IFM_H 112
-#define IFM_W 112
-#define IFM_C 32
-#define KERNEL_H 3
-#define KERNEL_W 3
+#define IFM_H 56
+#define IFM_W 56
+#define IFM_C 128
+#define KERNEL_H 1
+#define KERNEL_W 1
 #define STRIDE_H 1
 #define STRIDE_W 1
-#define OFM_C 16
+#define OFM_C 32
 #define PADDING_TYPE "SAME"
 
 
@@ -34,8 +34,8 @@ int main() {
 
     // 2. Read Quantization Parameters
     // Paths assumed correct relative to execution dir
-    char params_dir[] = "extracted_params_hsigmoid/layer007_CONV_2D_1_block1a_project_conv_1_BiasAdd_1_block1a_project_conv_1_convo";
-    char input_dir[] = "all_layer_io/layer_7_CONV_2D";
+    char params_dir[] = "extracted_params_hsigmoid/layer014_CONV_2D_1_block2b_project_conv_1_BiasAdd_1_block2b_project_conv_1_convo";
+    char input_dir[] = "all_layer_io/layer_14_CONV_2D";
     char path_buf[512];
 
     // Read scalars
@@ -97,6 +97,9 @@ int main() {
         int temp_shift = 0;
         QuantizeMultiplier(double_multiplier, &output_multipliers[oc], &temp_shift);
         output_shifts[oc] = (int8_t)temp_shift;
+        if (oc == 0) {
+            printf("DEBUG: oc=0, double_multiplier=%f, multiplier=%d, shift=%d\\n", double_multiplier, output_multipliers[0], temp_shift);
+        }
     }
 
     // 5. Prepare Output Buffer

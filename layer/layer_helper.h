@@ -450,4 +450,113 @@ int8_t* run_mean_layer(const char* params_dir, const char* input_dir, int8_t* in
     if (!input_data_override) free(input_data);
     return output_data;
 }
+// Hàm tách tên file tương thích với cả Windows (\) và Linux (/)
+void get_filename_without_ext(const char* path, char* out_name) {
+    const char* slash = strrchr(path, '/');
+    const char* backslash = strrchr(path, '\\');
+    
+    // Lấy dấu phân cách nằm cuối cùng nhất
+    const char* last_slash = (slash > backslash) ? slash : backslash;
+    
+    const char* filename = last_slash ? last_slash + 1 : path;
+    const char* dot = strrchr(filename, '.');
+    
+    if (dot) {
+        strncpy(out_name, filename, dot - filename);
+        out_name[dot - filename] = '\0';
+    } else {
+        strcpy(out_name, filename);
+    }
+}
+
+
+static int8_t* load_input_tensor(const char* path, int* input_size) {
+    int size = count_elements(path);
+    int8_t* input_data = (int8_t*)malloc(size * sizeof(int8_t));
+
+    if (!input_data) {
+        return NULL;
+    }
+
+    read_int8_array(path, input_data, size);
+    if (input_size) {
+        *input_size = size;
+    }
+
+    return input_data;
+}
+
+// Hàm lưu kết quả và so sánh trực tiếp với file Golden (Đáp án chuẩn từ TFLite)
+void save_and_compare_debug(const char* layer_name, int8_t* c_output, int size, const char* golden_file_path) {
+    // 1. Lưu output của C ra file (để dự phòng)
+    char filename[256];
+    sprintf(filename, "c_outputs/debug_%s.txt", layer_name);
+    
+    FILE *f_debug = fopen(filename, "w");
+    if (f_debug) {
+        for(int i = 0; i < size; ++i) {
+            fprintf(f_debug, "%d\n", c_output[i]);
+        }
+        fclose(f_debug);
+    }
+
+    // 2. Load file Golden và So sánh (Nếu có truyền đường dẫn)
+    if (golden_file_path != NULL && strlen(golden_file_path) > 0) {
+        FILE *f_golden = fopen(golden_file_path, "r");
+        if (!f_golden) {
+            printf("\n[CẢNH BÁO] Khong tim thay file golden tai: %s\n", golden_file_path);
+            printf("Hay dung Python TFLite xuat file nay truoc nhe.\n");
+        } else {
+            int8_t* golden_data = (int8_t*)malloc(size * sizeof(int8_t));
+            int temp_val;
+            int elements_read = 0;
+            
+            // Đọc file text chứa các số nguyên
+            while(fscanf(f_golden, "%d", &temp_val) == 1 && elements_read < size) {
+                golden_data[elements_read] = (int8_t)temp_val;
+                elements_read++;
+            }
+            fclose(f_golden);
+
+            if (elements_read != size) {
+                printf("\n[CẢNH BÁO] File golden chi co %d phan tu (Của C la %d phan tu)\n", elements_read, size);
+            } else {
+                // 3. Tiến hành so sánh toán học
+                int max_diff = 0;
+                int error_count_all = 0; // Số phần tử lệch > 0
+                int error_count_gt2 = 0; // Số phần tử lệch > 2 (Bỏ qua sai số do làm tròn)
+
+                for (int i = 0; i < size; ++i) {
+                    int diff = abs((int)c_output[i] - (int)golden_data[i]);
+                    if (diff > max_diff) {
+                        max_diff = diff;
+                    }
+                    if (diff > 0) error_count_all++;
+                    if (diff > 2) error_count_gt2++;
+                }
+
+                // 4. In báo cáo
+                printf("\n==================================================\n");
+                printf(" KET QUA SO SANH LAYER [%s] VOI GOLDEN FILE:\n", layer_name);
+                printf("--------------------------------------------------\n");
+                printf(" - Sai so lon nhat (Max Diff) : %d\n", max_diff);
+                printf(" - So phan tu lech (> 0)      : %d / %d (%.2f%%)\n", error_count_all, size, (float)error_count_all/size*100);
+                printf(" - So phan tu lech nhieu (> 2): %d / %d (%.2f%%)\n", error_count_gt2, size, (float)error_count_gt2/size*100);
+                
+                if (max_diff <= 1) { // Lệch 1 đơn vị thường do khác biệt float round, có thể chấp nhận
+                    printf(" ->  CHUAN XAC TUYET DOI SO VOI TFLITE!\n");
+                } else {
+                    printf(" ->  CO SAI SO TOAN HOC! Hay kiem tra lai ham C.\n");
+                }
+                printf("==================================================\n");
+            }
+            free(golden_data);
+        }
+    } else {
+        printf("\n[DEBUG] Da luu output vao %s (Khong co file Golden de so sanh)\n", filename);
+    }
+    
+    printf("=== CHUONG TRINH DUNG SOM DE DEBUG ===\n");
+    exit(0); 
+}
 #endif

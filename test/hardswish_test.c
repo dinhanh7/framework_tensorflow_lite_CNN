@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include "../layer/hardswish.h"
+#include "../layer/utils.h"
 
 // ============================================================================
 // Helper Functions (File I/O)

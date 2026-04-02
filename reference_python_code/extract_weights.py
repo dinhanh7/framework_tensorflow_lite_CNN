@@ -64,11 +64,9 @@ def extract_tflite_params(model_path, output_dir="extracted_params"):
         # Tạo thư mục con cho mỗi layer 
         folder_base_name = f"layer{layer_counter:03d}_{op_name}_{block_name}"
         
-        # Hệ điều hành Linux (ext4) giới hạn tên thư mục tối đa là 255 ký tự.
-        # Nên nếu chuỗi vượt quá 250 ký tự, chúng ta bắt buộc phải cắt bớt phần đuôi
-        # để tránh lỗi OSError: [Errno 36] File name too long
-        if len(folder_base_name) > 250:
-            folder_base_name = folder_base_name[:250]
+        # Rút ngắn tên thư mục tối đa, tránh lỗi Filename too long trong git và windows
+        if len(folder_base_name) > 80:
+            folder_base_name = folder_base_name[:80]
             
         layer_dir = os.path.join(output_dir, folder_base_name)
         if not os.path.exists(layer_dir):
@@ -124,6 +122,6 @@ def extract_tflite_params(model_path, output_dir="extracted_params"):
     print(f"Hoàn tất! Các file (.txt) đã được lưu tại thư mục: '{output_dir}'.")
 
 if __name__ == "__main__":
-    MODEL_PATH = "efficientnetv2_b0_bnless_int8.tflite"
-    extract_tflite_params(MODEL_PATH)
+    MODEL_PATH = "cell_hswish_hsigmoid/efficientnetv2_b0_bnless_int8.tflite"
+    extract_tflite_params(MODEL_PATH, output_dir="extracted_params_hsigmoid_test")
 
