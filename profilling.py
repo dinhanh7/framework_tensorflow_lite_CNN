@@ -3,7 +3,7 @@ import numpy as np
 import sys
 
 # --- ĐỊNH NGHĨA FILE OUTPUT ---
-output_log_file = 'model_profile.txt'
+output_log_file = 'model_profile_old.txt'
 
 # --- ĐƯỜNG DẪN ĐẾN FILE MODEL CỦA BẠN ---
 tflite_model_path = 'c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\cell_hswish_hsigmoid\\efficientnetv2_b0_bnless_int8.tflite'
