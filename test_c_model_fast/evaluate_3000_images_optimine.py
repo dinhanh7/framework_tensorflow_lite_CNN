@@ -5,12 +5,13 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 import time
 import multiprocessing as mp
+from tqdm import tqdm # Thêm thư viện tqdm
 
 # =========================================================================
 # CẤU HÌNH TOÀN CỤC
 # =========================================================================
 NUM_IMAGES = 3000
-TFLITE_MODEL_PATH = r"cell_hswish_hsigmoid\efficientnetv2_b0_bnless_int8.tflite"
+TFLITE_MODEL_PATH = r"efficientnetv2_b0_bnless_int8_new_weight.tflite"
 DLL_PATH = os.path.abspath("efficientnet_c_lib.dll")
 
 LAYER_5_INPUT_INDEX = 201 
@@ -18,7 +19,7 @@ FC_WEIGHTS_INDEX = 11
 FC_BIAS_INDEX = 10
 LAYER_278_INDEX = 475
 
-# Các biến toàn cục dành riêng cho từng Worker (Tránh đụng độ vùng nhớ)
+# Các biến toàn cục dành riêng cho từng Worker
 worker_interpreter = None
 worker_c_lib = None
 worker_metadata = {}
@@ -29,6 +30,14 @@ worker_metadata = {}
 def init_worker():
     """Hàm này chạy một lần cho mỗi process được sinh ra."""
     global worker_interpreter, worker_c_lib, worker_metadata
+    
+    # ---------------------------------------------------------------------
+    # MẸO: TẮT TOÀN BỘ PRINTF TỪ THƯ VIỆN C
+    # Chuyển hướng stdout (fd 1) và stderr (fd 2) ở mức hệ điều hành vào devnull
+    # ---------------------------------------------------------------------
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull_fd, 1) # Tắt stdout từ C (printf)
+    os.dup2(devnull_fd, 2) # Tắt stderr từ C (fprintf(stderr, ...))
     
     # 1. Khởi tạo TFLite riêng biệt cho Process này
     worker_interpreter = tf.lite.Interpreter(model_path=TFLITE_MODEL_PATH, experimental_preserve_all_tensors=True)
@@ -123,7 +132,6 @@ def process_single_image(data_dict):
 # =========================================================================
 if __name__ == '__main__':
     print("[*] Đang đọc cấu hình TFLite Model (Tiền xử lý)...")
-    # Lấy thông số lượng tử hóa một lần để dùng cho tf.data
     temp_interpreter = tf.lite.Interpreter(model_path=TFLITE_MODEL_PATH)
     temp_interpreter.allocate_tensors()
     input_details = temp_interpreter.get_input_details()[0]
@@ -132,7 +140,6 @@ if __name__ == '__main__':
     
     print("[*] Chuẩn bị pipeline dữ liệu...")
     
-    # Tiền xử lý được thực hiện song song bằng tf.data trên Main Process
     def preprocess_image(example, index):
         img = tf.image.resize(example['image'], [224, 224])
         if input_dtype == np.int8:
@@ -147,7 +154,6 @@ if __name__ == '__main__':
         img = tf.expand_dims(img, axis=0)
         return {'image': img, 'label': example['label'], 'index': index}
 
-    # Load dataset và gán index
     ds = tfds.load('imagenet_v2', split='test', shuffle_files=False).take(NUM_IMAGES)
     ds = ds.enumerate() 
     ds = ds.map(lambda idx, ex: preprocess_image(ex, idx), num_parallel_calls=tf.data.AUTOTUNE)
@@ -157,25 +163,26 @@ if __name__ == '__main__':
     correct_count = 0
     start_time = time.time()
 
-    # Khởi tạo Process Pool
-    # Sử dụng initializer để set up DLL và TFLite an toàn trên mỗi worker
     with mp.Pool(processes=mp.cpu_count(), initializer=init_worker) as pool:
-        # imap đảm bảo kết quả trả về theo đúng thứ tự ảnh đầu vào
-        for result in pool.imap(process_single_image, ds_iterator):
+        
+        # ---------------------------------------------------------------------
+        # SỬ DỤNG TQDM ĐỂ TẠO THANH TIẾN TRÌNH
+        # ---------------------------------------------------------------------
+        for result in tqdm(pool.imap(process_single_image, ds_iterator), total=NUM_IMAGES, desc="Tiến trình suy luận", unit="ảnh"):
             idx = result['index']
             
-            # In debug cho 10 ảnh đầu tiên
             if result['debug_info']:
                 dbg = result['debug_info']
-                print("--- SO SÁNH TRỰC TIẾP TẠI LAYER 278 ---")
-                print(f"Sai số lớn nhất: {dbg['max_error']}")
-                print(f"Phần tử sai số = 1: {dbg['err_1']}")
-                print(f"Phần tử sai số = 2: {dbg['err_2']}")
-                print(f"Phần tử sai số > 2: {dbg['err_gt2']}")
-                print("\n" + "!"*50)
-                print(f"C Output     : {dbg['c_out']}")
-                print(f"TFLite Output: {dbg['tf_out']}")
-                print("!"*50 + "\n")
+                # Dùng tqdm.write thay cho print() để không làm giật/lỗi thanh tiến trình
+                tqdm.write("--- SO SÁNH TRỰC TIẾP TẠI LAYER 278 ---")
+                tqdm.write(f"Sai số lớn nhất: {dbg['max_error']}")
+                tqdm.write(f"Phần tử sai số = 1: {dbg['err_1']}")
+                tqdm.write(f"Phần tử sai số = 2: {dbg['err_2']}")
+                tqdm.write(f"Phần tử sai số > 2: {dbg['err_gt2']}")
+                tqdm.write("\n" + "!"*50)
+                tqdm.write(f"C Output     : {dbg['c_out']}")
+                tqdm.write(f"TFLite Output: {dbg['tf_out']}")
+                tqdm.write("!"*50 + "\n")
 
             if result['is_correct']:
                 correct_count += 1
@@ -183,8 +190,8 @@ if __name__ == '__main__':
             if idx < 10 or (idx + 1) % 100 == 0:
                 mark = '✅' if result['is_correct'] else '❌'
                 acc = (correct_count / (idx + 1)) * 100
-                print(f"Ảnh {idx+1}/{NUM_IMAGES} - True: {result['true_label']}, Pred: {result['pred_label']} - {mark}")
-                print(f"Accuracy hiện tại: {acc:.2f}%")
+                # Dùng tqdm.write cho log định kỳ
+                tqdm.write(f"Ảnh {idx+1}/{NUM_IMAGES} - True: {result['true_label']}, Pred: {result['pred_label']} - {mark} | Accuracy hiện tại: {acc:.2f}%")
 
     total_time = time.time() - start_time
     print("\n" + "="*50)
