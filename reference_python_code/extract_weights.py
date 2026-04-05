@@ -122,6 +122,6 @@ def extract_tflite_params(model_path, output_dir="extracted_params"):
     print(f"Hoàn tất! Các file (.txt) đã được lưu tại thư mục: '{output_dir}'.")
 
 if __name__ == "__main__":
-    MODEL_PATH = "cell_hswish_hsigmoid/efficientnetv2_b0_bnless_int8.tflite"
-    extract_tflite_params(MODEL_PATH, output_dir="extracted_params_hsigmoid_test")
+    MODEL_PATH = "efficientnetv2_b0_bnless_int8_new_weight.tflite"
+    extract_tflite_params(MODEL_PATH, output_dir="extracted_params_hsigmoid_new_weight_test")
 
