@@ -1,7 +1,7 @@
 # TensorFlow Lite CNN in C Framework
 
 ## Mô tả
-Project này triển khai một số các op trong tflite, tạo 1 đoạn model sequence và đánh giá acc của model sequence bằng C
+Project này triển khai một số các op trong tflite bằng C, tạo 1 đoạn model sequence và đánh giá acc của model sequence.
 
 ## Mô tả cấu trúc dự án
 ```
@@ -13,7 +13,7 @@ Project này triển khai một số các op trong tflite, tạo 1 đoạn model
 |---cell_hswish/           # Chứa code python define model với hswish
 |---cell_hswish_hsigmoid/  # Chứa code python define model với hswish + hsigmoid
 |---reference_python_code/ # Code python để ref của anh Đình Anh
-|---tf*lite**/              # Chứa model tflite mới
+|---tf*lite**/             # Chứa model tflite mới
 |
 ```
 Các file không được liệt kê trên là các script python chủ yếu dùng 1 lần sẽ bị xoá trong tương lai
