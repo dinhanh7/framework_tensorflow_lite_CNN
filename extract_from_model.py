@@ -290,13 +290,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="cell_hswish_hsigmoid/efficientnetv2_b0_bnless_int8.tflite",
+        default="tf_lite_dropout_imagenet100/efficientnetv2_b0_bnless_int8.tflite",
         help="Đường dẫn file .tflite"
     )
     parser.add_argument(
         "--output",
         type=str,
-        default="extracted_params_complete",
+        default="extracted_params_dropout_imagenet100",
         help="Thư mục output"
     )
     parser.add_argument(

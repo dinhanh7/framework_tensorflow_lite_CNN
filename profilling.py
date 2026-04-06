@@ -6,7 +6,7 @@ import sys
 output_log_file = 'model_profile_old.txt'
 
 # --- ĐƯỜNG DẪN ĐẾN FILE MODEL CỦA BẠN ---
-tflite_model_path = 'c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\cell_hswish_hsigmoid\\efficientnetv2_b0_bnless_int8.tflite'
+tflite_model_path = 'c:\\Code c\\Tensorflow\\framework_tensorflow_lite_CNN\\tf_lite_dropout_imagenet100\\efficientnetv2_b0_bnless_int8.tflite'
 
 # Lưu lại stdout gốc để có thể khôi phục sau
 original_stdout = sys.stdout 

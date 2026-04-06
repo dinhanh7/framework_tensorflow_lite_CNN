@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "../layer/layer_helper.h"
-#include "layer_paths.h"
+#include "layer_paths_new_weight_fixed.h"
 
 // Hàm tách tên file tương thích với cả Windows (\) và Linux (/)
 void get_filename_without_ext(const char* path, char* out_name) {
