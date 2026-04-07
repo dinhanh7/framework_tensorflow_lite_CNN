@@ -407,7 +407,7 @@ void compare_debug_only(const char* layer_name, int8_t* c_output, int size, cons
     }
     free(golden_data);
     
-    printf("=== DUNG CHUONG TRINH DE DEBUG (exit 0) ===\n");
-    exit(0); 
+    // printf("=== DUNG CHUONG TRINH DE DEBUG (exit 0) ===\n");
+    // exit(0); 
 }
 #endif

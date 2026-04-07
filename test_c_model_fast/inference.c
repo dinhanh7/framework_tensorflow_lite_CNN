@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 // #include "layer/layer_helper.h"
-#include "layer_paths_new_weight.h"
+#include "layer_paths.h"
 #include "inference_helper.h"
 
 #ifdef _WIN32
@@ -1066,7 +1066,7 @@ EXPORT void run_model_inference(int8_t* input_layer4, int8_t* output_layer278) {
     printf("Starting layer 278 Mean...\n");
     int8_t* layer_278_out = run_mean_layer(&g_cache[278], LAYER_IO_PATHS[278],
                                             layer_277_out, conv276_out_h, conv276_out_w, 1280, 1, 1);
-    // compare_debug_only("layer_278_out", layer_278_out, 1280, "all_layer_io/layer_278_MEAN/ofm_0.txt");
+    compare_debug_only("layer_278_out", layer_278_out, 1280, "tf_lite_dropout_imagenet100/all_layer_io/layer_278_MEAN/ofm_0.txt");
     // save_and_compare_debug("layer_278_out", layer_278_out, 1280, "all_layer_io\\layer_278_MEAN\\ofm_0.txt");
     for(int i = 0; i < 1280; ++i) {
         output_layer278[i] = layer_278_out[i];
