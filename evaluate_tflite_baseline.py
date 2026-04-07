@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 # --- CẤU HÌNH ---
-TFLITE_MODEL_PATH = r"cell_hswish_hsigmoid\efficientnetv2_b0_bnless_int8.tflite"
+TFLITE_MODEL_PATH = r"efficientnetv2_b0_bnless_int8_new_weight.tflite"
 NUM_IMAGES = 3000  # Số lượng ảnh bạn muốn kiểm tra (giống với số lượng bạn xuất ra C)
 
 print("="*60)
